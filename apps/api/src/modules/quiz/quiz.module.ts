@@ -1,0 +1,14 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from '../../prisma/prisma.module';
+import { RetrievalModule } from '../retrieval/retrieval.module';
+import { QuizService } from './quiz.service';
+import { QuizController } from './quiz.controller';
+
+@Module({
+  imports: [PrismaModule, RetrievalModule, ConfigModule],
+  providers: [QuizService],
+  controllers: [QuizController],
+  exports: [QuizService],
+})
+export class QuizModule {}

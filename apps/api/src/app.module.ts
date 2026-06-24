@@ -11,6 +11,19 @@ import { UsersModule } from "./users/users.module";
 import { StorageModule } from "./storage/storage.module";
 import { QueuesModule } from "./queues/queues.module";
 import { DocumentsModule } from "./documents/documents.module";
+import { ChatModule } from "./chat/chat.module";
+import { ConversationModule } from "./modules/conversation/conversation.module";
+import { MessagesModule } from "./modules/messages/message.module";
+import { RetrievalModule } from "./modules/retrieval/retrieval.module";
+import { ContextBuilderModule } from "./modules/context-builder/context-builder.module";
+import { PromptEngineModule } from "./modules/prompt-engine/prompt-engine.module";
+import { CitationsModule } from "./modules/citations/citations.module";
+import { StreamingModule } from "./modules/streaming/streaming.module";
+import { MemoryModule } from "./modules/memory/memory.module";
+import { SynthesisModule } from "./modules/synthesis/synthesis.module";
+import { QuizModule } from "./modules/quiz/quiz.module";
+import { FlashcardModule } from "./modules/flashcards/flashcards.module";
+import { StudyModeModule } from "./modules/study-mode/study-mode.module";
 
 @Controller("health")
 export class HealthController {
@@ -67,6 +80,19 @@ export class HealthController {
     StorageModule,
     QueuesModule,
     DocumentsModule,
+    ChatModule,
+    ConversationModule,
+    MessagesModule,
+    RetrievalModule,
+    ContextBuilderModule,
+    PromptEngineModule,
+    CitationsModule,
+    StreamingModule,
+    MemoryModule,
+    SynthesisModule,
+    QuizModule,
+    FlashcardModule,
+    StudyModeModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -104,22 +104,29 @@ model DocumentChunk {
 model Conversation {
   id        String    @id @default(uuid())
   userId    String
+  tenantId  String
   title     String
+  summary   String?   @db.Text
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  Message[]
 
+  @@index([tenantId])
   @@map("conversations")
 }
 
 model Message {
   id             String       @id @default(uuid())
   conversationId String
+  tenantId       String
   role           MessageRole
   content        String       @db.Text
+  citations      Json?
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
+  @@index([conversationId])
+  @@index([tenantId])
   @@map("messages")
 }
 
@@ -127,4 +134,56 @@ enum EmbeddingStatus {
   PENDING
   COMPLETED
   FAILED
+}
+
+model Quiz {
+  id             String         @id @default(uuid())
+  userId         String
+  tenantId       String
+  conversationId String?
+  title          String
+  difficulty     String
+  createdAt      DateTime       @default(now())
+  questions      QuizQuestion[]
+
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id            String   @id @default(uuid())
+  quizId        String
+  type          String   // MCQ | TRUE_FALSE | SHORT_ANSWER
+  question      String   @db.Text
+  options       Json?    // Optional MCQ choices list: string[]
+  answer        String   @db.Text
+  explanation   String   @db.Text
+  chunkIdSource String
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_questions")
+}
+
+model FlashcardDeck {
+  id             String      @id @default(uuid())
+  userId         String
+  tenantId       String
+  conversationId String?
+  title          String
+  createdAt      DateTime    @default(now())
+  flashcards     Flashcard[]
+
+  @@map("flashcard_decks")
+}
+
+model Flashcard {
+  id            String        @id @default(uuid())
+  deckId        String
+  front         String        @db.Text
+  back          String        @db.Text
+  chunkIdSource String
+  tags          Json?         // tag words: e.g. ["topic", "difficulty"]
+  createdAt     DateTime      @db.Timestamp(3) @default(now())
+  deck          FlashcardDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  @@map("flashcards")
 }

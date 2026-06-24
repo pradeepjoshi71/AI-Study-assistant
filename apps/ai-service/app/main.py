@@ -23,6 +23,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.api.chat_stream import router as chat_stream_router
+from app.api.memory_summarizer import router as memory_summarizer_router
+from app.api.synthesis_engine import router as synthesis_engine_router
+from app.api.study_engine import router as study_engine_router
+app.include_router(chat_stream_router, prefix="/ai")
+app.include_router(memory_summarizer_router, prefix="/ai")
+app.include_router(synthesis_engine_router, prefix="/ai")
+app.include_router(study_engine_router, prefix="/ai")
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("FastAPI starting: launching background BullMQ processing worker...")
@@ -35,10 +44,11 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 from app.services.vector_search import VectorSearchService
 from app.services.reranker import RerankerService
 from app.services.context_builder import ContextBuilderService
+from app.services.llm import LLMOrchestrator
 
 db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres_secure_pass@localhost:5432/study_assistant?schema=public")
 if db_url.startswith("postgresql://"):
@@ -51,6 +61,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 vector_search = VectorSearchService()
 reranker = RerankerService()
 context_builder = ContextBuilderService()
+llm_orchestrator = LLMOrchestrator()
 
 class RagSearchRequest(BaseModel):
     userId: str
@@ -101,6 +112,42 @@ def ai_rag_search(req: RagSearchRequest):
         }
     finally:
         db.close()
+
+from fastapi.responses import StreamingResponse
+
+class ChatStreamRequest(BaseModel):
+    systemPrompt: str
+    message: str
+    history: List[Dict[str, str]] = []
+
+@app.post("/ai/chat/stream")
+async def ai_chat_stream(req: ChatStreamRequest):
+    logger.info("AI chat stream request received.")
+    
+    async def event_generator():
+        try:
+            async for token in llm_orchestrator.stream_chat(
+                system_prompt=req.systemPrompt,
+                message=req.message,
+                history=req.history
+            ):
+                # Yield SSE event format
+                yield f"event: token\ndata: {token}\n\n"
+            yield "event: done\ndata: {}\n\n"
+        except Exception as e:
+            logger.error(f"Error in event_generator: {e}")
+            yield f"event: error\ndata: {str(e)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+class SummarizeRequest(BaseModel):
+    messages: List[Dict[str, str]]
+
+@app.post("/ai/chat/summarize")
+async def ai_chat_summarize(req: SummarizeRequest):
+    logger.info("AI chat summarize request received.")
+    summary = await llm_orchestrator.summarize(req.messages)
+    return {"summary": summary}
 
 @app.get("/")
 def read_root():
