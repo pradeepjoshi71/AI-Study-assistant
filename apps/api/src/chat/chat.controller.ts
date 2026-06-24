@@ -1,9 +1,11 @@
-import { Controller, Post, Get, Body, Res, Param, UseGuards, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, Res, Param, UseGuards, Req, HttpStatus } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ChatService, SendChatDto } from './chat.service';
 import { ConversationService } from '../conversation/conversation.service';
-import { Response } from 'express';
+import { Response, Request } from 'express';
+import { RateLimitGuard } from '../common/guards/rate-limit.guard';
+import { RateLimit } from '../common/decorators/rate-limit.decorator';
 
 @UseGuards(JwtAuthGuard)
 @Controller('chat')
@@ -14,9 +16,12 @@ export class ChatController {
   ) {}
 
   @Post('send')
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ limit: 20, window: 60 })
   async sendChat(
     @Body() dto: SendChatDto,
     @CurrentUser('id') userId: string,
+    @CurrentUser('tenantId') tenantId: string,
     @Res() res: Response,
   ) {
     // Establish SSE connection headers
@@ -25,7 +30,7 @@ export class ChatController {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    await this.chatService.handleChatStream(dto, userId, res);
+    await this.chatService.handleChatStream(dto, userId, res, tenantId);
   }
 
   @Post('regenerate')

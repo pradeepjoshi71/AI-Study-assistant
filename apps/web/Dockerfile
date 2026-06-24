@@ -32,11 +32,24 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+# Non-root user matching Next.js recommended setup
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser --system --uid 1001 nextjs
+
 # Copy NextJS standalone server files and client-side static resources
 COPY --from=builder /usr/src/app/apps/web/public ./apps/web/public
-COPY --from=builder /usr/src/app/apps/web/.next/standalone ./
-COPY --from=builder /usr/src/app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/apps/web/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/apps/web/.next/static ./apps/web/.next/static
+
+USER nextjs
+
+# OCI image labels
+LABEL org.opencontainers.image.title="ai-study-assistant-web" \
+      org.opencontainers.image.description="Next.js 15 frontend"
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
 CMD ["node", "apps/web/server.js"]

@@ -1,0 +1,46 @@
+---
+# ============================================================
+# ALB Ingress — AWS Load Balancer Controller for EKS
+# Install: helm install aws-load-balancer-controller \
+#   eks/aws-load-balancer-controller -n kube-system
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  namespace: api
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80,"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: "{{ .Values.acmCertificateArn }}"
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    # WAF
+    alb.ingress.kubernetes.io/wafv2-acl-arn: "{{ .Values.wafAclArn }}"
+    # Health check
+    alb.ingress.kubernetes.io/healthcheck-path: /api/v1/health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+    # Deregistration delay for zero-downtime
+    alb.ingress.kubernetes.io/target-group-attributes: |
+      deregistration_delay.timeout_seconds=30
+    # Access logs
+    alb.ingress.kubernetes.io/load-balancer-attributes: |
+      access_logs.s3.enabled=true,
+      access_logs.s3.bucket={{ .Values.albLogsBucket }},
+      access_logs.s3.prefix=alb-eks
+spec:
+  rules:
+    - host: "{{ .Values.apiSubdomain }}.{{ .Values.domainName }}"
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80

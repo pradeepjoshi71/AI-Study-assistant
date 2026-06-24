@@ -29,3 +29,13 @@ export class GenerateQuizDto {
   @Max(20)
   count!: number;
 }
+
+export class SubmitQuizDto {
+  @IsNumber()
+  @Min(0)
+  correctAnswers!: number;
+
+  @IsNumber()
+  @Min(0)
+  wrongAnswers!: number;
+}

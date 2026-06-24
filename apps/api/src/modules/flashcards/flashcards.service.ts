@@ -2,8 +2,9 @@ import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenEx
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MultiDocRetrievalService } from '../retrieval/multi-doc.retrieval';
-import { GenerateFlashcardsDto } from './flashcards.types';
+import { GenerateFlashcardsDto, SubmitFlashcardReviewDto } from './flashcards.types';
 import { MessageRole } from '@prisma/client';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class FlashcardService {
@@ -14,6 +15,7 @@ export class FlashcardService {
     private prisma: PrismaService,
     private multiDocRetrievalService: MultiDocRetrievalService,
     private configService: ConfigService,
+    private analyticsService: AnalyticsService,
   ) {
     this.aiServiceUrl = this.configService.get<string>(
       'NEXT_PUBLIC_AI_SERVICE_URL',
@@ -175,6 +177,29 @@ export class FlashcardService {
       orderBy: {
         createdAt: 'desc',
       },
+    });
+  }
+
+  /**
+   * Submits a flashcard review rating and logs it in the analytics system.
+   */
+  async submitReview(userId: string, tenantId: string, flashcardId: string, dto: SubmitFlashcardReviewDto) {
+    const card = await this.prisma.flashcard.findUnique({
+      where: { id: flashcardId },
+      include: { deck: true }
+    });
+
+    if (!card) {
+      throw new NotFoundException('Flashcard not found');
+    }
+
+    if (card.deck.tenantId !== tenantId) {
+      throw new ForbiddenException('Tenant access denied');
+    }
+
+    return this.analyticsService.logFlashcardReview(userId, tenantId, {
+      flashcardId,
+      recallStatus: dto.recallStatus,
     });
   }
 }

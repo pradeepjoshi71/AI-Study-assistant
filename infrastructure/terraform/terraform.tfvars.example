@@ -1,0 +1,44 @@
+# Copy this file to terraform.tfvars and fill in the values
+# NEVER commit terraform.tfvars to git — it is in .gitignore
+
+environment = "production"
+aws_region  = "ap-south-1"
+vpc_cidr    = "10.0.0.0/16"
+az_count    = 2
+
+api_cpu           = 512
+api_memory        = 1024
+api_desired_count = 2
+api_min_count     = 2
+api_max_count     = 10
+
+ai_cpu           = 1024
+ai_memory        = 2048
+ai_desired_count = 2
+ai_min_count     = 1
+ai_max_count     = 8
+
+worker_cpu           = 512
+worker_memory        = 1024
+worker_desired_count = 1
+worker_min_count     = 1
+worker_max_count     = 6
+
+db_instance_class        = "db.t4g.medium"
+db_allocated_storage     = 50
+db_max_allocated_storage = 200
+db_name                  = "study_assistant"
+db_username              = "postgres"
+db_read_replica_count    = 1
+
+redis_node_type          = "cache.t4g.medium"
+redis_num_cache_clusters = 2
+
+# REPLACE THESE:
+domain_name   = "YOUR_DOMAIN.com"
+api_subdomain = "api"
+
+gemini_api_key_secret_arn = "arn:aws:secretsmanager:ap-south-1:YOUR_ACCOUNT:secret:..."
+jwt_secret_arn            = "arn:aws:secretsmanager:ap-south-1:YOUR_ACCOUNT:secret:..."
+
+# db_password → set via: export TF_VAR_db_password="YOUR_SECURE_PASSWORD"

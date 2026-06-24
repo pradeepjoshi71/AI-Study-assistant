@@ -1,0 +1,122 @@
+# ============================================================
+# OpenTelemetry Collector Config
+# Receives traces from NestJS + FastAPI → exports to AWS X-Ray + CloudWatch
+# Deploy as a sidecar or daemonset
+# ============================================================
+
+receivers:
+  # Receive OTLP traces from NestJS (via @opentelemetry/sdk-node)
+  # and FastAPI (via opentelemetry-sdk-python)
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - "http://localhost:*"
+            - "https://*.${DOMAIN_NAME}"
+
+  # Prometheus metrics scraping from all services
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: "api-service"
+          static_configs:
+            - targets: ["localhost:3001"]
+          metrics_path: "/api/v1/metrics"
+          scrape_interval: 15s
+
+        - job_name: "ai-service"
+          static_configs:
+            - targets: ["localhost:8000"]
+          metrics_path: "/metrics"
+          scrape_interval: 15s
+
+processors:
+  # Batch traces for efficiency
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+    send_batch_max_size: 1024
+
+  # Add resource attributes (environment, service name)
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: "${ENVIRONMENT}"
+        action: upsert
+      - key: cloud.provider
+        value: "aws"
+        action: upsert
+      - key: cloud.region
+        value: "${AWS_REGION}"
+        action: upsert
+
+  # Filter out health check noise
+  filter/health_checks:
+    traces:
+      span:
+        - 'attributes["http.route"] == "/api/v1/health"'
+        - 'attributes["http.route"] == "/health"'
+
+  # Memory limiter — prevent OOM on burst
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+exporters:
+  # AWS X-Ray — distributed tracing
+  awsxray:
+    region: "${AWS_REGION}"
+    local_mode: false
+    resource_arn: ""
+    role_arn: ""
+    no_verify_ssl: false
+
+  # CloudWatch EMF — structured metrics from traces
+  awsemf:
+    region: "${AWS_REGION}"
+    log_group_name: "/aws/otel/${SERVICE_NAME}"
+    log_stream_name: "otel-${HOSTNAME}"
+    namespace: "ai-study-assistant/OTEL"
+    dimension_rollup_option: "NoDimensionRollup"
+    metric_declarations:
+      - dimensions: [[service.name, http.method]]
+        metric_name_selectors:
+          - "latency"
+          - "http.server.duration"
+      - dimensions: [[service.name]]
+        metric_name_selectors:
+          - "rpc.server.duration"
+
+  # CloudWatch Logs — for traces as structured JSON
+  awscloudwatchlogs:
+    region: "${AWS_REGION}"
+    log_group_name: "/aws/otel/traces"
+    log_stream_name: "${SERVICE_NAME}-traces"
+
+  # Debug output in development
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/health_checks, resource, batch]
+      exporters: [awsxray, awscloudwatchlogs]
+
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, resource, batch]
+      exporters: [awsemf]
+
+  telemetry:
+    logs:
+      level: "info"
+    metrics:
+      level: "basic"
+      address: 0.0.0.0:8888  # Expose collector's own metrics

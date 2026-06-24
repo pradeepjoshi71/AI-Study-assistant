@@ -1,0 +1,35 @@
+---
+# ============================================================
+# Kubernetes Namespaces — logical isolation per concern
+# ============================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/managed-by: helm
+    env: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai
+  labels:
+    app.kubernetes.io/managed-by: helm
+    env: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: workers
+  labels:
+    app.kubernetes.io/managed-by: helm
+    env: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    app.kubernetes.io/managed-by: helm
+    env: production

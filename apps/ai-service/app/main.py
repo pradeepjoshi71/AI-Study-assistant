@@ -3,6 +3,7 @@ from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 from app.core.config import settings
+from app.middleware.observability import ObservabilityMiddleware
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,14 +24,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Structured JSON request logging + X-Correlation-ID propagation
+app.add_middleware(ObservabilityMiddleware)
+
+
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """FastAPI health check — polled by NestJS HealthController"""
+    return {"status": "ok", "service": settings.PROJECT_NAME}
+
 from app.api.chat_stream import router as chat_stream_router
 from app.api.memory_summarizer import router as memory_summarizer_router
 from app.api.synthesis_engine import router as synthesis_engine_router
 from app.api.study_engine import router as study_engine_router
+from app.api.analytics_insights import router as analytics_insights_router
+from app.api.tutor_agent import router as tutor_agent_router
+from app.api.knowledge_graph import router as knowledge_graph_router
 app.include_router(chat_stream_router, prefix="/ai")
 app.include_router(memory_summarizer_router, prefix="/ai")
 app.include_router(synthesis_engine_router, prefix="/ai")
 app.include_router(study_engine_router, prefix="/ai")
+app.include_router(analytics_insights_router, prefix="/ai")
+app.include_router(tutor_agent_router, prefix="/ai")
+app.include_router(knowledge_graph_router, prefix="/ai")
 
 @app.on_event("startup")
 async def startup_event():

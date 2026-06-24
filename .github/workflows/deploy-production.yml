@@ -1,0 +1,288 @@
+name: "Deploy — Production (main branch)"
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Services to deploy (comma-separated: api,ai-service,worker,all)"
+        required: true
+        default: "all"
+      image_tag:
+        description: "Specific image tag to deploy (leave blank for latest sha)"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # Never cancel running production deployments
+
+permissions:
+  id-token: write  # Required for OIDC → AWS
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME }}
+  ENVIRONMENT: production
+
+jobs:
+  # ─────────────────────────────────────────────────────────
+  # STAGE 1: BUILD + PUSH Docker images to ECR
+  # ─────────────────────────────────────────────────────────
+  build-and-push:
+    name: "Build & Push to ECR"
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      api_image: ${{ steps.meta.outputs.api_image }}
+      ai_image: ${{ steps.meta.outputs.ai_image }}
+      worker_image: ${{ steps.meta.outputs.worker_image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC — no long-lived keys!)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          SHA_TAG="sha-$(echo $GITHUB_SHA | cut -c1-8)"
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            TAG="${{ github.event.inputs.image_tag }}"
+          else
+            TAG="${SHA_TAG}"
+          fi
+          echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "api_image=${{ env.ECR_REGISTRY }}/ai-study-assistant-production/api:${TAG}" >> $GITHUB_OUTPUT
+          echo "ai_image=${{ env.ECR_REGISTRY }}/ai-study-assistant-production/ai-service:${TAG}" >> $GITHUB_OUTPUT
+          echo "worker_image=${{ env.ECR_REGISTRY }}/ai-study-assistant-production/worker:${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push — API (NestJS)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.api_image }}
+            ${{ env.ECR_REGISTRY }}/ai-study-assistant-production/api:latest
+          cache-from: type=gha,scope=api-prod
+          cache-to: type=gha,mode=max,scope=api-prod
+          labels: |
+            org.opencontainers.image.sha=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: Build & Push — AI Service (FastAPI)
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/ai-service
+          file: apps/ai-service/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.ai_image }}
+            ${{ env.ECR_REGISTRY }}/ai-study-assistant-production/ai-service:latest
+          cache-from: type=gha,scope=ai-service-prod
+          cache-to: type=gha,mode=max,scope=ai-service-prod
+
+      - name: Build & Push — Worker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.worker_image }}
+            ${{ env.ECR_REGISTRY }}/ai-study-assistant-production/worker:latest
+          cache-from: type=gha,scope=worker-prod
+          cache-to: type=gha,mode=max,scope=worker-prod
+          build-args: |
+            WORKER_MODE=true
+
+  # ─────────────────────────────────────────────────────────
+  # STAGE 2: DEPLOY — Rolling update per service
+  # ─────────────────────────────────────────────────────────
+  deploy-api:
+    name: "Deploy API Service"
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.${{ secrets.DOMAIN_NAME }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ai-study-assistant-production-api \
+            --query taskDefinition \
+            > task-def-api.json
+
+      - name: Update image in task definition
+        id: task-def-api
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def-api.json
+          container-name: api
+          image: ${{ needs.build-and-push.outputs.api_image }}
+
+      - name: Deploy to ECS (rolling update)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def-api.outputs.task-definition }}
+          service: ${{ secrets.API_SERVICE_NAME }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          # Circuit breaker is configured in Terraform → auto-rollback on failure
+          force-new-deployment: true
+
+  deploy-ai-service:
+    name: "Deploy AI Service"
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ai-study-assistant-production-ai-service \
+            --query taskDefinition \
+            > task-def-ai.json
+
+      - name: Update image in task definition
+        id: task-def-ai
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def-ai.json
+          container-name: ai-service
+          image: ${{ needs.build-and-push.outputs.ai_image }}
+
+      - name: Deploy AI Service to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def-ai.outputs.task-definition }}
+          service: ${{ secrets.AI_SERVICE_NAME }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          force-new-deployment: true
+
+  deploy-worker:
+    name: "Deploy Worker Service"
+    needs: [build-and-push, deploy-api]  # Deploy worker after API succeeds
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ai-study-assistant-production-worker \
+            --query taskDefinition \
+            > task-def-worker.json
+
+      - name: Update image in task definition
+        id: task-def-worker
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def-worker.json
+          container-name: worker
+          image: ${{ needs.build-and-push.outputs.worker_image }}
+
+      - name: Deploy Worker to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def-worker.outputs.task-definition }}
+          service: ${{ secrets.WORKER_SERVICE_NAME }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          force-new-deployment: true
+
+  # ─────────────────────────────────────────────────────────
+  # STAGE 3: POST-DEPLOY HEALTH CHECKS
+  # ─────────────────────────────────────────────────────────
+  post-deploy-health:
+    name: "Post-Deploy Health Validation"
+    needs: [deploy-api, deploy-ai-service, deploy-worker]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run health checks
+        id: health-check
+        run: |
+          chmod +x infrastructure/scripts/health-check.sh
+          ./infrastructure/scripts/health-check.sh \
+            "https://api.${{ secrets.DOMAIN_NAME }}/api/v1/health" \
+            30 \
+            5
+        env:
+          HEALTH_CHECK_RETRIES: 10
+
+      - name: Notify on success
+        if: success()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "✅ Production deployment successful!\nCommit: ${{ github.sha }}\nBranch: ${{ github.ref_name }}\nDeployed by: ${{ github.actor }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Notify on failure + trigger rollback
+        if: failure()
+        run: |
+          echo "::error::Health check failed after deployment!"
+          echo "Triggering automatic rollback..."
+          # The ECS circuit breaker handles rollback automatically.
+          # This step is for notifications + audit trail.
+        continue-on-error: true
+
+      - name: Slack alert on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "🚨 Production deployment FAILED and ROLLED BACK!\nCommit: ${{ github.sha }}\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

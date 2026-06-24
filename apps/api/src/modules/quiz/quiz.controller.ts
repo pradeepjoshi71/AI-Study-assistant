@@ -2,7 +2,7 @@ import { Controller, Post, Get, Body, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { QuizService } from './quiz.service';
-import { GenerateQuizDto } from './quiz.types';
+import { GenerateQuizDto, SubmitQuizDto } from './quiz.types';
 
 @UseGuards(JwtAuthGuard)
 @Controller('study')
@@ -16,6 +16,16 @@ export class QuizController {
   ) {
     const tenantId = userId; // tenant isolation fallback
     return this.quizService.generateQuiz(userId, tenantId, dto);
+  }
+
+  @Post('quiz/:id/submit')
+  async submitQuiz(
+    @Param('id') quizId: string,
+    @Body() dto: SubmitQuizDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    const tenantId = userId;
+    return this.quizService.submitQuiz(userId, tenantId, quizId, dto);
   }
 
   @Get('quiz/:id')

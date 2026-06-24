@@ -1,0 +1,90 @@
+name: "Emergency Rollback"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options: [production, staging]
+      service:
+        description: "Service to rollback"
+        required: true
+        type: choice
+        options: [api, ai-service, worker, all]
+      task_definition_revision:
+        description: "Task definition revision to rollback to (leave blank for previous revision)"
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  rollback:
+    name: "Rollback ${{ github.event.inputs.service }} on ${{ github.event.inputs.environment }}"
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ github.event.inputs.environment == 'production' && secrets.AWS_DEPLOY_ROLE_ARN || secrets.AWS_DEPLOY_ROLE_ARN_STAGING }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set cluster name
+        run: |
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            echo "CLUSTER=${{ secrets.ECS_CLUSTER_NAME }}" >> $GITHUB_ENV
+            echo "NAME_PREFIX=ai-study-assistant-production" >> $GITHUB_ENV
+          else
+            echo "CLUSTER=${{ secrets.ECS_CLUSTER_NAME_STAGING }}" >> $GITHUB_ENV
+            echo "NAME_PREFIX=ai-study-assistant-staging" >> $GITHUB_ENV
+          fi
+
+      - name: Rollback service(s)
+        run: |
+          chmod +x infrastructure/scripts/rollback.sh
+
+          SERVICES="${{ github.event.inputs.service }}"
+          if [ "$SERVICES" = "all" ]; then
+            SERVICES="api ai-service worker"
+          fi
+
+          for SERVICE in $SERVICES; do
+            echo "Rolling back ${SERVICE}..."
+            ./infrastructure/scripts/rollback.sh \
+              "${CLUSTER}" \
+              "${NAME_PREFIX}-${SERVICE}" \
+              "${{ github.event.inputs.task_definition_revision }}"
+          done
+
+      - name: Verify rollback health
+        run: |
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            BASE_URL="https://api.${{ secrets.DOMAIN_NAME }}"
+          else
+            BASE_URL="https://api-staging.${{ secrets.DOMAIN_NAME }}"
+          fi
+          chmod +x infrastructure/scripts/health-check.sh
+          ./infrastructure/scripts/health-check.sh "${BASE_URL}/api/v1/health" 30 5
+
+      - name: Post rollback notification
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "⏪ ROLLBACK executed on ${{ github.event.inputs.environment }}!\nService: ${{ github.event.inputs.service }}\nTriggered by: ${{ github.actor }}\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

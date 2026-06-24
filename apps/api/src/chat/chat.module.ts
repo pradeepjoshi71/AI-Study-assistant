@@ -6,6 +6,7 @@ import { RetrievalModule } from '../retrieval/retrieval.module';
 import { CitationsModule } from '../citations/citations.module';
 import { PromptEngineModule } from '../prompt-engine/prompt-engine.module';
 import { ContextBuilderModule } from '../context-builder/context-builder.module';
+import { CommonModule } from '../common/common.module';
 
 @Module({
   imports: [
@@ -14,8 +15,10 @@ import { ContextBuilderModule } from '../context-builder/context-builder.module'
     CitationsModule,
     PromptEngineModule,
     ContextBuilderModule,
+    CommonModule,
   ],
   controllers: [ChatController],
   providers: [ChatService],
 })
 export class ChatModule {}
+

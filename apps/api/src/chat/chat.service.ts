@@ -7,6 +7,8 @@ import { ContextBuilderService } from '../context-builder/context-builder.servic
 import { ConfigService } from '@nestjs/config';
 import { MessageRole } from '@prisma/client';
 import { Response } from 'express';
+import { CacheService, CACHE_TTL } from '../common/services/cache.service';
+import { MetricsService } from '../common/services/metrics.service';
 
 export interface SendChatDto {
   conversationId?: string;
@@ -27,6 +29,8 @@ export class ChatService {
     private promptEngineService: PromptEngineService,
     private contextBuilderService: ContextBuilderService,
     private configService: ConfigService,
+    private cacheService: CacheService,
+    private metricsService: MetricsService,
   ) {
     this.aiServiceUrl = this.configService.get<string>('NEXT_PUBLIC_AI_SERVICE_URL', 'http://localhost:8000');
   }
@@ -35,8 +39,38 @@ export class ChatService {
     dto: SendChatDto,
     userId: string,
     res: Response,
+    tenantId?: string,
   ): Promise<void> {
+    const startMs = Date.now();
     let conversationId = dto.conversationId;
+
+    // ─── RAG Query Cache Check ──────────────────────────────────────────
+    // Only cache on non-new conversations (we need a conversationId for SSE)
+    if (conversationId && tenantId) {
+      const cacheKey = CacheService.ragQueryKey(tenantId, dto.message, dto.documentIds);
+      const cached = await this.cacheService.get<string>(cacheKey);
+
+      if (cached) {
+        this.logger.log(`RAG cache HIT for key=${cacheKey}`);
+        // Re-stream cached answer as synthetic SSE tokens
+        const words = cached.split(' ');
+        for (const word of words) {
+          res.write(`event: token\ndata: ${word} \n\n`);
+        }
+        res.write(`event: done\ndata: {}\n\n`);
+        res.end();
+
+        // Record cache-hit metric (fire-and-forget)
+        this.metricsService.recordUsage({
+          userId, tenantId,
+          endpoint: 'chat.send',
+          cacheHit: true,
+          latencyMs: Date.now() - startMs,
+          model: 'cached',
+        });
+        return;
+      }
+    }
 
     // 1. Create conversation if not provided
     if (!conversationId) {
@@ -76,8 +110,8 @@ export class ChatService {
       contextPackage.summary,
     );
 
-    // 7. Stream LLM Response from FastAPI
-    await this.streamFromAiService(
+    // 7. Stream LLM Response from FastAPI (captures full text for caching)
+    const { fullText, tokenCount } = await this.streamFromAiService(
       systemPrompt,
       dto.message,
       contextPackage.history,
@@ -85,6 +119,23 @@ export class ChatService {
       enrichedCitations,
       res,
     );
+
+    // 8. Write response to RAG cache (async, non-blocking)
+    if (fullText && conversationId && tenantId) {
+      const cacheKey = CacheService.ragQueryKey(tenantId, dto.message, dto.documentIds);
+      this.cacheService.set(cacheKey, fullText, CACHE_TTL.RAG_QUERY).catch(() => {});
+    }
+
+    // 9. Record usage metrics (fire-and-forget)
+    this.metricsService.recordUsage({
+      userId,
+      tenantId: tenantId ?? 'unknown',
+      endpoint: 'chat.send',
+      tokensOut: tokenCount,
+      latencyMs: Date.now() - startMs,
+      cacheHit: false,
+      model: 'gemini-1.5-flash',
+    });
   }
 
   async regenerateLastMessage(
@@ -162,7 +213,7 @@ export class ChatService {
     conversationId: string,
     citations: Citation[],
     res: Response,
-  ): Promise<void> {
+  ): Promise<{ fullText: string; tokenCount: number }> {
     try {
       const response = await fetch(`${this.aiServiceUrl}/ai/chat/stream`, {
         method: 'POST',
@@ -180,7 +231,7 @@ export class ChatService {
         this.logger.error(`Failed to stream from AI service: ${response.statusText}`);
         res.write(`event: error\ndata: Failed to generate response\n\n`);
         res.end();
-        return;
+        return { fullText: '', tokenCount: 0 };
       }
 
       const reader = response.body.getReader();
@@ -235,10 +286,13 @@ export class ChatService {
       res.write(`event: done\ndata: {}\n\n`);
       res.end();
 
+      return { fullText: assistantResponse, tokenCount: Math.round(assistantResponse.length / 4) };
+
     } catch (err: any) {
       this.logger.error(`Error streaming from AI service: ${err.message}`);
       res.write(`event: error\ndata: Stream connection failure\n\n`);
       res.end();
+      return { fullText: '', tokenCount: 0 };
     }
   }
 }

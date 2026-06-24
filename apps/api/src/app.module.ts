@@ -1,6 +1,6 @@
-import { Module, Get, Controller } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
-import { APP_GUARD } from "@nestjs/core";
+import { Module, Get, Controller, MiddlewareConsumer, NestModule } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RedisModule } from "./redis/redis.module";
@@ -24,38 +24,65 @@ import { SynthesisModule } from "./modules/synthesis/synthesis.module";
 import { QuizModule } from "./modules/quiz/quiz.module";
 import { FlashcardModule } from "./modules/flashcards/flashcards.module";
 import { StudyModeModule } from "./modules/study-mode/study-mode.module";
+import { AnalyticsModule } from "./modules/analytics/analytics.module";
+import { InsightsModule } from "./modules/insights/insights.module";
+import { TutorModule } from "./modules/tutor-agent/tutor.module";
+import { KnowledgeGraphModule } from "./modules/knowledge-graph/knowledge-graph.module";
+import { CommonModule } from "./common/common.module";
+import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.middleware";
+import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 
 @Controller("health")
 export class HealthController {
+  private readonly aiServiceUrl: string;
+
   constructor(
     private prisma: PrismaService,
     private redis: RedisService,
-  ) {}
+    private config: ConfigService,
+  ) {
+    this.aiServiceUrl = this.config.get<string>('NEXT_PUBLIC_AI_SERVICE_URL', 'http://localhost:8000');
+  }
 
   @Get()
   async getHealth() {
+    // 1. PostgreSQL
     let databaseStatus = "UP";
-    let redisStatus = "UP";
-
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-    } catch (err) {
-      databaseStatus = "DOWN";
-    }
+    } catch { databaseStatus = "DOWN"; }
 
+    // 2. Redis
+    let redisStatus = "UP";
     try {
-      const redisClient = this.redis.getClient();
-      await redisClient.ping();
-    } catch (err) {
-      redisStatus = "DOWN";
-    }
+      await this.redis.getClient().ping();
+    } catch { redisStatus = "DOWN"; }
+
+    // 3. Qdrant
+    let qdrantStatus = "UP";
+    try {
+      const qdrantHost = this.config.get<string>('QDRANT_HOST', 'localhost');
+      const qdrantPort = this.config.get<number>('QDRANT_PORT', 6333);
+      const res = await fetch(`http://${qdrantHost}:${qdrantPort}/healthz`, { signal: AbortSignal.timeout(2000) });
+      if (!res.ok) qdrantStatus = "DOWN";
+    } catch { qdrantStatus = "DOWN"; }
+
+    // 4. FastAPI AI Service
+    let aiServiceStatus = "UP";
+    try {
+      const res = await fetch(`${this.aiServiceUrl}/health`, { signal: AbortSignal.timeout(2000) });
+      if (!res.ok) aiServiceStatus = "DOWN";
+    } catch { aiServiceStatus = "DOWN"; }
+
+    const allUp = [databaseStatus, redisStatus, qdrantStatus, aiServiceStatus].every(s => s === "UP");
 
     return {
-      status:
-        databaseStatus === "UP" && redisStatus === "UP" ? "ok" : "degraded",
+      status: allUp ? "ok" : "degraded",
       details: {
         database: databaseStatus,
         redis: redisStatus,
+        qdrant: qdrantStatus,
+        aiService: aiServiceStatus,
       },
       timestamp: new Date().toISOString(),
     };
@@ -93,6 +120,11 @@ export class HealthController {
     QuizModule,
     FlashcardModule,
     StudyModeModule,
+    AnalyticsModule,
+    InsightsModule,
+    TutorModule,
+    KnowledgeGraphModule,
+    CommonModule,
   ],
   controllers: [HealthController],
   providers: [
@@ -100,6 +132,19 @@ export class HealthController {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: LoggingInterceptor,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * Register CorrelationIdMiddleware globally across all routes.
+   * This runs BEFORE guards and interceptors — ensuring every request
+   * gets a correlation ID for distributed tracing.
+   */
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+  }
+}

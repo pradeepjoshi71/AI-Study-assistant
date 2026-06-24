@@ -1,27 +1,61 @@
-import { Module } from "@nestjs/common";
-import { BullModule } from "@nestjs/bullmq";
-import { ConfigModule, ConfigService } from "@nestjs/config";
-import { DocumentProcessingProcessor } from "./document-processing.processor";
+import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { PrismaModule } from '../prisma/prisma.module';
+import { CommonModule } from '../common/common.module';
+import { KnowledgeGraphModule } from '../modules/knowledge-graph/knowledge-graph.module';
+import { MemoryModule } from '../modules/memory/memory.module';
+import { DocumentProcessingProcessor } from './document-processing.processor';
+import { EmbeddingGenerationProcessor } from './embedding-generation.processor';
+import { GraphBuildingProcessor } from './graph-building.processor';
+import { AnalyticsAggregationProcessor } from './analytics-aggregation.processor';
+import { MemorySummarizationProcessor } from './memory-summarization.processor';
+import { CostAggregationProcessor } from './cost-aggregation.processor';
+
+const QUEUE_NAMES = [
+  'document-processing',
+  'embedding-generation',
+  'graph-building',
+  'analytics-aggregation',
+  'memory-summarization',
+  'cost-aggregation',
+];
 
 @Module({
   imports: [
+    PrismaModule,
+    CommonModule,
+    KnowledgeGraphModule,
+    MemoryModule,
+    ConfigModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         connection: {
-          host: configService.get<string>("REDIS_HOST", "localhost"),
-          port: Number(configService.get<number>("REDIS_PORT", 6379)),
-          password:
-            configService.get<string>("REDIS_PASSWORD", "") || undefined,
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: Number(configService.get<number>('REDIS_PORT', 6379)),
+          password: configService.get<string>('REDIS_PASSWORD', '') || undefined,
+        },
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 3000 },
+          removeOnComplete: 100, // keep last 100 completed jobs
+          removeOnFail: 50,
         },
       }),
       inject: [ConfigService],
     }),
-    BullModule.registerQueue({
-      name: "document-processing",
-    }),
+    ...QUEUE_NAMES.map((name) => BullModule.registerQueue({ name })),
   ],
-  providers: [DocumentProcessingProcessor],
-  exports: [BullModule, DocumentProcessingProcessor],
+  providers: [
+    DocumentProcessingProcessor,
+    EmbeddingGenerationProcessor,
+    GraphBuildingProcessor,
+    AnalyticsAggregationProcessor,
+    MemorySummarizationProcessor,
+    CostAggregationProcessor,
+  ],
+  exports: [BullModule],
 })
 export class QueuesModule {}
+

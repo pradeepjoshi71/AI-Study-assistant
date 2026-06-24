@@ -1,0 +1,107 @@
+name: "Deploy — Staging (develop branch)"
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true # Cancel older staging deploys if new commit arrives
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME_STAGING }}
+  ENVIRONMENT: staging
+
+jobs:
+  build-and-deploy-staging:
+    name: "Build, Push & Deploy to Staging"
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://api-staging.${{ secrets.DOMAIN_NAME }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_STAGING }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: meta
+        run: |
+          TAG="sha-$(echo $GITHUB_SHA | cut -c1-8)-staging"
+          echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push — API
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: ${{ env.ECR_REGISTRY }}/ai-study-assistant-staging/api:${{ steps.meta.outputs.image_tag }}
+          cache-from: type=gha,scope=api-staging
+          cache-to: type=gha,mode=max,scope=api-staging
+
+      - name: Build & Push — AI Service
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/ai-service
+          file: apps/ai-service/Dockerfile
+          push: true
+          tags: ${{ env.ECR_REGISTRY }}/ai-study-assistant-staging/ai-service:${{ steps.meta.outputs.image_tag }}
+          cache-from: type=gha,scope=ai-staging
+          cache-to: type=gha,mode=max,scope=ai-staging
+
+      - name: Build & Push — Worker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: ${{ env.ECR_REGISTRY }}/ai-study-assistant-staging/worker:${{ steps.meta.outputs.image_tag }}
+          cache-from: type=gha,scope=worker-staging
+          cache-to: type=gha,mode=max,scope=worker-staging
+
+      - name: Deploy all services to Staging ECS
+        run: |
+          for SERVICE in api ai-service worker; do
+            echo "Deploying ${SERVICE} to staging..."
+            aws ecs update-service \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --service "ai-study-assistant-staging-${SERVICE}" \
+              --force-new-deployment \
+              --no-cli-pager
+          done
+
+      - name: Wait for staging stability
+        run: |
+          for SERVICE in api ai-service worker; do
+            aws ecs wait services-stable \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --services "ai-study-assistant-staging-${SERVICE}"
+          done
+
+      - name: Staging health check
+        run: |
+          chmod +x infrastructure/scripts/health-check.sh
+          ./infrastructure/scripts/health-check.sh \
+            "https://api-staging.${{ secrets.DOMAIN_NAME }}/api/v1/health" \
+            20 \
+            3

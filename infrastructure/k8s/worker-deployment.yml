@@ -1,0 +1,92 @@
+---
+# ============================================================
+# Worker Deployment — BullMQ on EKS
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: workers
+  labels:
+    app: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      serviceAccountName: worker-service-account
+      # Worker pods can afford longer termination — finish current job
+      terminationGracePeriodSeconds: 300
+
+      # Use spot/preemptible nodes for workers (cost savings)
+      tolerations:
+        - key: "spot"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+
+      nodeSelector:
+        node-type: worker  # Schedule on dedicated worker node group
+
+      containers:
+        - name: worker
+          image: "{{ .Values.ecrRegistry }}/worker:{{ .Values.worker.imageTag }}"
+
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: WORKER_MODE
+              value: "true"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: worker-secrets
+                  key: database-url
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: worker-config
+                  key: redis-host
+            - name: AI_SERVICE_URL
+              value: "http://ai-service.ai.svc.cluster.local:8000"
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: worker-secrets
+                  key: gemini-api-key
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+
+          # Workers have no inbound — no liveness HTTP check needed
+          # Use process-based liveness instead
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep -f 'node' || exit 1"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+
+          lifecycle:
+            preStop:
+              exec:
+                # Send SIGTERM to allow BullMQ to finish current job gracefully
+                command: ["/bin/sh", "-c", "kill -SIGTERM 1 && sleep 30"]

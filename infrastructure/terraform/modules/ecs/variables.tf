@@ -1,0 +1,40 @@
+variable "name_prefix"           { type = string }
+variable "aws_region"            { type = string }
+variable "environment"           { type = string }
+variable "vpc_id"                { type = string; default = "" }
+variable "private_subnet_ids"    { type = list(string) }
+variable "api_sg_id"             { type = string }
+variable "ai_sg_id"              { type = string }
+variable "worker_sg_id"          { type = string }
+variable "api_target_group_arn"  { type = string }
+variable "api_ecr_image"         { type = string }
+variable "ai_ecr_image"          { type = string }
+variable "worker_ecr_image"      { type = string }
+variable "execution_role_arn"    { type = string }
+variable "api_task_role_arn"     { type = string }
+variable "ai_task_role_arn"      { type = string }
+variable "gemini_api_key_secret_arn" { type = string }
+variable "jwt_secret_arn"        { type = string }
+variable "db_host"               { type = string }
+variable "db_name"               { type = string }
+variable "db_username"           { type = string }
+variable "db_password"           { type = string; sensitive = true }
+variable "redis_endpoint"        { type = string }
+variable "qdrant_host"           { type = string }
+variable "s3_bucket_name"        { type = string }
+variable "api_cpu"               { type = number }
+variable "api_memory"            { type = number }
+variable "api_desired_count"     { type = number }
+variable "ai_cpu"                { type = number }
+variable "ai_memory"             { type = number }
+variable "ai_desired_count"      { type = number }
+variable "worker_cpu"            { type = number }
+variable "worker_memory"         { type = number }
+variable "worker_desired_count"  { type = number }
+
+output "cluster_id"          { value = aws_ecs_cluster.main.id }
+output "cluster_name"        { value = aws_ecs_cluster.main.name }
+output "api_service_name"    { value = aws_ecs_service.api.name }
+output "ai_service_name"     { value = aws_ecs_service.ai_service.name }
+output "worker_service_name" { value = aws_ecs_service.worker.name }
+output "service_discovery_namespace" { value = aws_service_discovery_private_dns_namespace.main.name }

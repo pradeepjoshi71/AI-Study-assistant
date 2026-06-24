@@ -2,8 +2,9 @@ import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenEx
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MultiDocRetrievalService } from '../retrieval/multi-doc.retrieval';
-import { GenerateQuizDto } from './quiz.types';
+import { GenerateQuizDto, SubmitQuizDto } from './quiz.types';
 import { MessageRole } from '@prisma/client';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class QuizService {
@@ -14,6 +15,7 @@ export class QuizService {
     private prisma: PrismaService,
     private multiDocRetrievalService: MultiDocRetrievalService,
     private configService: ConfigService,
+    private analyticsService: AnalyticsService,
   ) {
     this.aiServiceUrl = this.configService.get<string>(
       'NEXT_PUBLIC_AI_SERVICE_URL',
@@ -180,6 +182,29 @@ export class QuizService {
       orderBy: {
         createdAt: 'desc',
       },
+    });
+  }
+
+  /**
+   * Submits a quiz score and logs the attempt in the analytics system.
+   */
+  async submitQuiz(userId: string, tenantId: string, quizId: string, dto: SubmitQuizDto) {
+    const quiz = await this.prisma.quiz.findUnique({
+      where: { id: quizId },
+    });
+
+    if (!quiz) {
+      throw new NotFoundException('Quiz not found');
+    }
+
+    if (quiz.tenantId !== tenantId) {
+      throw new ForbiddenException('Tenant access denied');
+    }
+
+    return this.analyticsService.logQuizAttempt(userId, tenantId, {
+      quizId,
+      correctAnswers: dto.correctAnswers,
+      wrongAnswers: dto.wrongAnswers,
     });
   }
 }

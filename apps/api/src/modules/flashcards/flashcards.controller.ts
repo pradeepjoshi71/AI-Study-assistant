@@ -2,7 +2,7 @@ import { Controller, Post, Get, Body, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { FlashcardService } from './flashcards.service';
-import { GenerateFlashcardsDto } from './flashcards.types';
+import { GenerateFlashcardsDto, SubmitFlashcardReviewDto } from './flashcards.types';
 
 @UseGuards(JwtAuthGuard)
 @Controller('study')
@@ -16,6 +16,16 @@ export class FlashcardController {
   ) {
     const tenantId = userId; // tenant isolation fallback
     return this.flashcardService.generateFlashcards(userId, tenantId, dto);
+  }
+
+  @Post('flashcards/:id/review')
+  async submitReview(
+    @Param('id') flashcardId: string,
+    @Body() dto: SubmitFlashcardReviewDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    const tenantId = userId;
+    return this.flashcardService.submitReview(userId, tenantId, flashcardId, dto);
   }
 
   @Get('flashcards/deck/:id')

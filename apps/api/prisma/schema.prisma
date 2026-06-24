@@ -145,6 +145,7 @@ model Quiz {
   difficulty     String
   createdAt      DateTime       @default(now())
   questions      QuizQuestion[]
+  attempts       QuizAttempt[]
 
   @@map("quizzes")
 }
@@ -176,14 +177,205 @@ model FlashcardDeck {
 }
 
 model Flashcard {
-  id            String        @id @default(uuid())
+  id            String            @id @default(uuid())
   deckId        String
-  front         String        @db.Text
-  back          String        @db.Text
+  front         String            @db.Text
+  back          String            @db.Text
   chunkIdSource String
-  tags          Json?         // tag words: e.g. ["topic", "difficulty"]
-  createdAt     DateTime      @db.Timestamp(3) @default(now())
-  deck          FlashcardDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  tags          Json?             // tag words: e.g. ["topic", "difficulty"]
+  createdAt     DateTime          @db.Timestamp(3) @default(now())
+  deck          FlashcardDeck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  reviews       FlashcardReview[]
 
   @@map("flashcards")
 }
+
+model AnalyticsSession {
+  id        String   @id @default(uuid())
+  userId    String
+  tenantId  String
+  duration  Int      // in seconds
+  createdAt DateTime @default(now())
+
+  @@map("analytics_sessions")
+}
+
+model QuizAttempt {
+  id             String   @id @default(uuid())
+  userId         String
+  tenantId       String
+  quizId         String
+  score          Float
+  correctAnswers Int
+  wrongAnswers   Int
+  createdAt      DateTime @default(now())
+  quiz           Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_attempts")
+}
+
+model FlashcardReview {
+  id          String    @id @default(uuid())
+  userId      String
+  tenantId    String
+  flashcardId String
+  recallStatus String    // easy | hard | fail
+  createdAt   DateTime  @default(now())
+  flashcard   Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+
+  @@map("flashcard_reviews")
+}
+
+model MasteryScore {
+  id         String   @id @default(uuid())
+  userId     String
+  tenantId   String
+  topic      String
+  documentId String?
+  score      Float
+  updatedAt  DateTime @updatedAt
+
+  @@map("mastery_scores")
+}
+
+model StudyPlan {
+  id        String      @id @default(uuid())
+  userId    String
+  tenantId  String
+  weekStart DateTime
+  weekEnd   DateTime
+  status    String      // ACTIVE | COMPLETED | ARCHIVED
+  createdAt DateTime    @default(now())
+  tasks     StudyTask[]
+
+  @@map("study_plans")
+}
+
+model StudyTask {
+  id        String    @id @default(uuid())
+  planId    String
+  day       Int       // 1 to 7
+  type      String    // QUIZ | FLASHCARD | READING | REVISION
+  status    String    // PENDING | COMPLETED | MISSED
+  metadata  Json      // details (topic, estimatedTime, chunkIdSources)
+  createdAt DateTime  @default(now())
+  plan      StudyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("study_tasks")
+}
+
+model TutorInsight {
+  id            String   @id @default(uuid())
+  userId        String
+  tenantId      String
+  insightText   String   @db.Text
+  priorityLevel String   // HIGH | MEDIUM | LOW
+  createdAt     DateTime @default(now())
+
+  @@map("tutor_insights")
+}
+
+// ─────────────────────────────────────────────
+// Phase 2.1.9 — AI Knowledge Graph Engine
+// ─────────────────────────────────────────────
+
+model Concept {
+  id          String            @id @default(uuid())
+  tenantId    String
+  name        String            // normalized lowercase, e.g. "photosynthesis"
+  displayName String            // original casing, e.g. "Photosynthesis"
+  description String?           @db.Text
+  confidence  Float             @default(1.0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  chunkMaps   ChunkConceptMap[]
+  outgoing    ConceptRelation[] @relation("RelationFrom")
+  incoming    ConceptRelation[] @relation("RelationTo")
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("concepts")
+}
+
+model ConceptRelation {
+  id            String   @id @default(uuid())
+  tenantId      String
+  fromConceptId String
+  toConceptId   String
+  relationType  String   // EXPLAINS | RELATED_TO | PREREQUISITE_OF | PART_OF
+  weight        Float    @default(1.0)
+  createdAt     DateTime @default(now())
+  fromConcept   Concept  @relation("RelationFrom", fields: [fromConceptId], references: [id], onDelete: Cascade)
+  toConcept     Concept  @relation("RelationTo",   fields: [toConceptId],   references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, fromConceptId, toConceptId, relationType])
+  @@index([tenantId, fromConceptId])
+  @@map("concept_relations")
+}
+
+model ChunkConceptMap {
+  id         String   @id @default(uuid())
+  chunkId    String   // logical FK to document_chunks.id
+  conceptId  String
+  tenantId   String
+  confidence Float    @default(1.0)
+  createdAt  DateTime @default(now())
+  concept    Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@unique([chunkId, conceptId])
+  @@index([tenantId, chunkId])
+  @@map("chunk_concept_maps")
+}
+
+// ─────────────────────────────────────────────
+// Phase 2.2 — Production Hardening Layer
+// ─────────────────────────────────────────────
+
+model UsageMetric {
+  id        String   @id @default(uuid())
+  userId    String
+  tenantId  String
+  endpoint  String   // e.g. "chat.send", "quiz.generate"
+  tokensIn  Int      @default(0)
+  tokensOut Int      @default(0)
+  latencyMs Int      @default(0)
+  cacheHit  Boolean  @default(false)
+  model     String?  // e.g. "gemini-1.5-flash"
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, userId])
+  @@index([tenantId, createdAt])
+  @@map("usage_metrics")
+}
+
+model RequestLog {
+  id            String   @id @default(uuid())
+  correlationId String
+  tenantId      String?
+  userId        String?
+  method        String
+  path          String
+  statusCode    Int
+  latencyMs     Int
+  errorMessage  String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  @@index([correlationId])
+  @@index([tenantId, createdAt])
+  @@map("request_logs")
+}
+
+model CostTracking {
+  id                String   @id @default(uuid())
+  tenantId          String
+  userId            String
+  period            String   // "2024-06" (year-month bucket)
+  totalTokens       Int      @default(0)
+  estimatedCostUsd  Float    @default(0)
+  updatedAt         DateTime @updatedAt
+
+  @@unique([tenantId, userId, period])
+  @@index([tenantId, period])
+  @@map("cost_tracking")
+}
+

@@ -1,0 +1,130 @@
+---
+# ============================================================
+# AI Service Deployment — FastAPI on EKS
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: ai
+  labels:
+    app: ai-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ai-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: ai-service-account
+      terminationGracePeriodSeconds: 120  # LLM requests can be long-lived
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values: [ai-service]
+                topologyKey: topology.kubernetes.io/zone
+
+      containers:
+        - name: ai-service
+          image: "{{ .Values.ecrRegistry }}/ai-service:{{ .Values.aiService.imageTag }}"
+          ports:
+            - containerPort: 8000
+              name: http
+
+          env:
+            - name: AI_PORT
+              value: "8000"
+            - name: AI_HOST
+              value: "0.0.0.0"
+            - name: AI_REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-config
+                  key: redis-host
+            - name: QDRANT_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: ai-config
+                  key: qdrant-host
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-secrets
+                  key: gemini-api-key
+            - name: ENVIRONMENT
+              value: "production"
+
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 3Gi
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 10
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 10
+
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]  # Drain in-flight LLM calls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: ai
+spec:
+  selector:
+    app: ai-service
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  type: ClusterIP
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-service-pdb
+  namespace: ai
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ai-service

@@ -56,3 +56,43 @@ lerna-debug.log*
 *.sw?
 thumbs.db
 db.crypt
+
+# ─── Terraform ───────────────────────────────────────────────
+# Local .terraform directory contains provider binaries
+.terraform/
+.terraform.lock.hcl
+
+# Terraform state files — managed remotely in S3, never commit locally
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Terraform plan output (can contain secrets in plaintext)
+*.tfplan
+plan.out
+
+# Terraform variable files with actual values (use .example equivalents)
+# Exception: terraform.tfvars.example is safe to commit
+terraform.tfvars
+!terraform.tfvars.example
+envs/*/terraform.tfvars
+!envs/*/terraform.tfvars.example
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# Override files (local developer overrides)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ─── Infrastructure secrets ──────────────────────────────────
+# Never commit these
+*.pem
+*.key
+*.crt
+id_rsa
+id_rsa.pub
+.aws/credentials
