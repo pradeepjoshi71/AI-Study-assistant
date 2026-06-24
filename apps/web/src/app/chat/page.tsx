@@ -35,6 +35,8 @@ export default function ChatPage() {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [chatMode, setChatMode] = useState<"study" | "quiz" | "flashcard">("study");
+  const [installedPlugins, setInstalledPlugins] = useState<any[]>([]);
+  const [enabledPluginKeys, setEnabledPluginKeys] = useState<string[]>([]);
 
   const [inputMessage, setInputMessage] = useState("");
   const [activeCitation, setActiveCitation] = useState<CitationEvent | null>(null);
@@ -61,6 +63,7 @@ export default function ChatPage() {
     if (token) {
       fetchConversations();
       fetchDocuments();
+      fetchInstalledPlugins();
     }
   }, [token]);
 
@@ -72,6 +75,34 @@ export default function ChatPage() {
       setMessages([]);
     }
   }, [activeConvId, token]);
+
+  const fetchInstalledPlugins = async () => {
+    try {
+      const res = await fetch("http://localhost:3001/api/v1/plugins/installed", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setInstalledPlugins(data);
+        setEnabledPluginKeys(data.map((p: any) => p.key));
+      } else {
+        const mockInstalled = [
+          { id: "p1", key: "wolfram_alpha", name: "Wolfram Alpha" },
+          { id: "p3", key: "latex_formatter", name: "LaTeX Formatter" }
+        ];
+        setInstalledPlugins(mockInstalled);
+        setEnabledPluginKeys(mockInstalled.map(p => p.key));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch installed plugins, setting mocks:", err);
+      const mockInstalled = [
+        { id: "p1", key: "wolfram_alpha", name: "Wolfram Alpha" },
+        { id: "p3", key: "latex_formatter", name: "LaTeX Formatter" }
+      ];
+      setInstalledPlugins(mockInstalled);
+      setEnabledPluginKeys(mockInstalled.map(p => p.key));
+    }
+  };
 
   const fetchConversations = async () => {
     try {
@@ -190,7 +221,8 @@ export default function ChatPage() {
       queryText,
       activeConvId || undefined,
       selectedDocIds,
-      chatMode
+      chatMode,
+      enabledPluginKeys
     );
 
     if (resultId) {
@@ -349,6 +381,50 @@ export default function ChatPage() {
                 {mode}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Active AI Tools */}
+        <div style={{ padding: "20px", borderBottom: "1px solid var(--glass-border)" }}>
+          <h4 style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "12px" }}>
+            Active AI Tools
+          </h4>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "120px", overflowY: "auto" }}>
+            {installedPlugins.length === 0 ? (
+              <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+                No active tools. Install plugins in Marketplace first.
+              </p>
+            ) : (
+              installedPlugins.map((plugin) => (
+                <label
+                  key={plugin.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "0.85rem",
+                    color: enabledPluginKeys.includes(plugin.key) ? "#fff" : "var(--color-text-secondary)",
+                    cursor: "pointer"
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={enabledPluginKeys.includes(plugin.key)}
+                    onChange={() => {
+                      if (enabledPluginKeys.includes(plugin.key)) {
+                        setEnabledPluginKeys(enabledPluginKeys.filter((k) => k !== plugin.key));
+                      } else {
+                        setEnabledPluginKeys([...enabledPluginKeys, plugin.key]);
+                      }
+                    }}
+                    style={{ accentColor: "var(--color-secondary)" }}
+                  />
+                  <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }} title={plugin.name}>
+                    {plugin.name}
+                  </span>
+                </label>
+              ))
+            )}
           </div>
         </div>
 

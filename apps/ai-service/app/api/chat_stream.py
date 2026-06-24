@@ -11,8 +11,9 @@ stream_handler = StreamHandler(settings.GEMINI_API_KEY)
 class StreamRequest(BaseModel):
     systemPrompt: str
     message: str
-    history: List[Dict[str, str]] = []
+    history: List[Dict[str, Any]] = []
     citations: List[Dict[str, Any]] = []
+    tools: Optional[List[Dict[str, Any]]] = None
 
 @router.post("/chat/stream")
 async def chat_stream_endpoint(req: StreamRequest):
@@ -21,7 +22,8 @@ async def chat_stream_endpoint(req: StreamRequest):
             system_prompt=req.systemPrompt,
             message=req.message,
             history=req.history,
-            citations=req.citations
+            citations=req.citations,
+            tools=req.tools
         ),
         media_type="text/event-stream"
     )

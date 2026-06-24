@@ -2,9 +2,11 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  BadRequestException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
+import * as crypto from "crypto";
 import { UsersService } from "../users/users.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { RegisterDto } from "./dtos/register.dto";
@@ -138,7 +140,7 @@ export class AuthService {
     }
   }
 
-  private async generateTokensForUser(
+  public async generateTokensForUser(
     userId: string,
     email: string,
     existingSessionId?: string,
@@ -184,5 +186,128 @@ export class AuthService {
       accessToken,
       refreshToken,
     };
+  }
+
+  async handleGoogleCallback(code: string) {
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID', '');
+    const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET', '');
+    const callbackUrl = this.configService.get<string>('GOOGLE_CALLBACK_URL', 'http://localhost:3000/auth/oauth/google/callback');
+
+    if (!clientId || !clientSecret) {
+      throw new UnauthorizedException('Google OAuth credentials not configured on the server.');
+    }
+
+    let tokenData: any;
+    try {
+      const response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: callbackUrl,
+          grant_type: 'authorization_code',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      tokenData = await response.json();
+    } catch (e: any) {
+      throw new UnauthorizedException(`Failed to exchange Google OAuth code: ${e.message}`);
+    }
+
+    const accessToken = tokenData.access_token;
+
+    let profile: any;
+    try {
+      const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      profile = await response.json();
+    } catch (e: any) {
+      throw new UnauthorizedException(`Failed to fetch Google user profile: ${e.message}`);
+    }
+
+    const email = profile.email;
+    const providerUserId = profile.sub;
+    const name = profile.name || email.split('@')[0];
+    const avatar = profile.picture;
+
+    if (!email) {
+      throw new BadRequestException('Google Profile does not contain an email address');
+    }
+
+    let user = await this.usersService.findByEmail(email);
+
+    if (!user) {
+      const randomPasswordHash = crypto.randomUUID();
+      user = await this.usersService.create({
+        email,
+        password: randomPasswordHash,
+        name,
+        avatar,
+        role: 'STUDENT',
+      });
+
+      const slug = `${email.split('@')[0]}-org-${Math.floor(Math.random() * 1000)}`;
+      const freePlan = await this.prisma.plan.findUnique({
+        where: { type: 'FREE' },
+      });
+
+      if (freePlan) {
+        await this.prisma.$transaction(async (tx) => {
+          const org = await tx.organization.create({
+            data: {
+              name: `${name}'s Workspace`,
+              slug,
+              billingEmail: email,
+            },
+          });
+          await tx.subscription.create({
+            data: {
+              organizationId: org.id,
+              planId: freePlan.id,
+              status: 'ACTIVE',
+              currentPeriodStart: new Date(),
+              currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            },
+          });
+          await tx.organizationMember.create({
+            data: {
+              organizationId: org.id,
+              userId: user!.id,
+              role: 'OWNER',
+            },
+          });
+        });
+      }
+    }
+
+    const existingLink = await this.prisma.identityProvider.findUnique({
+      where: {
+        provider_providerUserId: {
+          provider: 'GOOGLE',
+          providerUserId,
+        },
+      },
+    });
+
+    if (!existingLink) {
+      await this.prisma.identityProvider.create({
+        data: {
+          userId: user.id,
+          provider: 'GOOGLE',
+          providerUserId,
+        },
+      });
+    }
+
+    return this.generateTokensForUser(user.id, user.email);
   }
 }

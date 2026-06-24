@@ -97,6 +97,62 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     return <p style={{ lineHeight: '1.6', margin: 0 }}>{parts}</p>;
   };
 
+  const renderMessageBody = (msg: ChatMessage) => {
+    try {
+      const parsed = JSON.parse(msg.content);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.type === 'tool_call') {
+          return (
+            <div style={{
+              background: 'rgba(245, 158, 11, 0.05)',
+              border: '1px solid rgba(245, 158, 11, 0.2)',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              margin: '4px 0',
+              fontFamily: 'monospace',
+              fontSize: '0.85rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontWeight: 600, marginBottom: '6px' }}>
+                ⚙️ Tool Call: {parsed.name}
+              </div>
+              <pre style={{ margin: 0, overflowX: 'auto', opacity: 0.8, color: '#f59e0b', whiteSpace: 'pre-wrap' }}>
+                {JSON.stringify(parsed.args, null, 2)}
+              </pre>
+            </div>
+          );
+        }
+        if (parsed.type === 'tool_response') {
+          return (
+            <div style={{
+              background: 'rgba(16, 185, 129, 0.05)',
+              border: '1px solid rgba(16, 185, 129, 0.2)',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              margin: '4px 0',
+              fontFamily: 'monospace',
+              fontSize: '0.85rem'
+            }}>
+              <details>
+                <summary style={{ cursor: 'pointer', color: '#10b981', fontWeight: 600, outline: 'none' }}>
+                  ✅ Tool Output: {parsed.name} (Click to expand)
+                </summary>
+                <pre style={{ marginTop: '8px', overflowX: 'auto', opacity: 0.8, color: '#10b981', whiteSpace: 'pre-wrap' }}>
+                  {JSON.stringify(parsed.response, null, 2)}
+                </pre>
+              </details>
+            </div>
+          );
+        }
+      }
+    } catch {
+      // Ignore and fallback
+    }
+
+    return msg.role === 'USER' 
+      ? <p style={{ margin: 0, lineHeight: 1.6 }}>{msg.content}</p> 
+      : renderContent(msg.content, msg.citations);
+  };
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', overflow: 'hidden' }}>
       
@@ -139,7 +195,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                     fontSize: '0.95rem',
                   }}
                 >
-                  {msg.role === 'USER' ? <p style={{ margin: 0, lineHeight: 1.6 }}>{msg.content}</p> : renderContent(msg.content, msg.citations)}
+                  {renderMessageBody(msg)}
                 </div>
               </div>
             ))}

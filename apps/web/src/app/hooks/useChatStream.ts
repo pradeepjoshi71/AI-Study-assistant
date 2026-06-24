@@ -24,6 +24,7 @@ export function useChatStream(token: string | null) {
       conversationId?: string,
       documentIds?: string[],
       mode = 'study',
+      enabledPluginKeys?: string[],
     ): Promise<string | null> => {
       if (!token) {
         setError('Authentication token is missing.');
@@ -36,7 +37,7 @@ export function useChatStream(token: string | null) {
       setError(null);
 
       try {
-        const response = await fetch('http://localhost:3001/api/v1/chat/stream', {
+        const response = await fetch('http://localhost:3001/api/v1/chat/send', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -47,6 +48,7 @@ export function useChatStream(token: string | null) {
             message,
             documentIds,
             mode,
+            enabledPluginKeys,
           }),
         });
 

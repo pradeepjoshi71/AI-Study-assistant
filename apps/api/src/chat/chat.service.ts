@@ -9,12 +9,14 @@ import { MessageRole } from '@prisma/client';
 import { Response } from 'express';
 import { CacheService, CACHE_TTL } from '../common/services/cache.service';
 import { MetricsService } from '../common/services/metrics.service';
+import { MarketplaceService } from '../marketplace/marketplace.service';
 
 export interface SendChatDto {
   conversationId?: string;
   message: string;
   documentIds?: string[];
   mode: 'study' | 'quiz' | 'flashcard';
+  enabledPluginKeys?: string[];
 }
 
 @Injectable()
@@ -31,6 +33,7 @@ export class ChatService {
     private configService: ConfigService,
     private cacheService: CacheService,
     private metricsService: MetricsService,
+    private marketplaceService: MarketplaceService,
   ) {
     this.aiServiceUrl = this.configService.get<string>('NEXT_PUBLIC_AI_SERVICE_URL', 'http://localhost:8000');
   }
@@ -104,34 +107,115 @@ export class ChatService {
     const contextPackage = await this.contextBuilderService.buildContext(conversationId, userId);
 
     // 6. Build RAG system prompt via Prompt Engine
-    const systemPrompt = this.promptEngineService.buildSystemPrompt(
+    const systemPrompt = await this.promptEngineService.buildSystemPrompt(
       dto.mode,
       retrievalResult.context,
       contextPackage.summary,
     );
 
-    // 7. Stream LLM Response from FastAPI (captures full text for caching)
-    const { fullText, tokenCount } = await this.streamFromAiService(
-      systemPrompt,
-      dto.message,
-      contextPackage.history,
-      conversationId,
-      enrichedCitations,
-      res,
-    );
-
-    // 8. Write response to RAG cache (async, non-blocking)
-    if (fullText && conversationId && tenantId) {
-      const cacheKey = CacheService.ragQueryKey(tenantId, dto.message, dto.documentIds);
-      this.cacheService.set(cacheKey, fullText, CACHE_TTL.RAG_QUERY).catch(() => {});
+    // 7. Fetch installed plugins for the active organization
+    let installedTools: any[] = [];
+    if (tenantId) {
+      installedTools = await this.marketplaceService.getInstalledPlugins(tenantId).catch(() => []);
     }
 
-    // 9. Record usage metrics (fire-and-forget)
+    // Filter by enabledPluginKeys if provided
+    if (dto.enabledPluginKeys && dto.enabledPluginKeys.length > 0) {
+      installedTools = installedTools.filter((t) => dto.enabledPluginKeys!.includes(t.key));
+    }
+
+    const geminiTools = installedTools.map((t) => ({
+      name: t.key,
+      description: t.description,
+      parameters: t.inputSchema,
+    }));
+
+    // 8. Stream LLM Response supporting tool calling loops
+    let loopCount = 0;
+    const maxLoops = 5;
+    let activeMessage = dto.message;
+    let activeHistory = [...contextPackage.history];
+    let activeCitations = [...enrichedCitations];
+    let finalFullText = '';
+    let finalTokenCount = 0;
+
+    while (loopCount < maxLoops) {
+      loopCount++;
+
+      const streamResult = await this.streamFromAiService(
+        systemPrompt,
+        activeMessage,
+        activeHistory,
+        conversationId,
+        activeCitations,
+        res,
+        geminiTools,
+      );
+
+      if (streamResult.toolCall) {
+        const { name: toolName, args: toolArgs } = streamResult.toolCall;
+        res.write(`event: token\ndata: [Executing tool: ${toolName}...] \n\n`);
+
+        let toolResult: any;
+        try {
+          const plugin = installedTools.find((t) => t.key === toolName);
+          if (!plugin) {
+            throw new Error(`Tool ${toolName} is not installed`);
+          }
+
+          toolResult = await this.marketplaceService.executeInstalledPlugin({
+            organizationId: tenantId!,
+            pluginId: plugin.id,
+            userId,
+            inputData: toolArgs,
+            conversationId,
+          });
+        } catch (err: any) {
+          toolResult = { error: err.message };
+        }
+
+        // Save tool call and response messages in DB
+        await this.conversationService.saveMessage(
+          conversationId,
+          MessageRole.ASSISTANT,
+          JSON.stringify({ type: 'tool_call', name: toolName, args: toolArgs }),
+        );
+        await this.conversationService.saveMessage(
+          conversationId,
+          MessageRole.USER,
+          JSON.stringify({ type: 'tool_response', name: toolName, response: toolResult }),
+        );
+
+        // Append to active context history
+        activeHistory.push({
+          role: 'assistant',
+          content: JSON.stringify({ type: 'tool_call', name: toolName, args: toolArgs }),
+        });
+        activeHistory.push({
+          role: 'user',
+          content: JSON.stringify({ type: 'tool_response', name: toolName, response: toolResult }),
+        });
+
+        continue;
+      }
+
+      finalFullText = streamResult.fullText;
+      finalTokenCount = streamResult.tokenCount;
+      break;
+    }
+
+    // 9. Write response to RAG cache (async, non-blocking)
+    if (finalFullText && conversationId && tenantId) {
+      const cacheKey = CacheService.ragQueryKey(tenantId, dto.message, dto.documentIds);
+      this.cacheService.set(cacheKey, finalFullText, CACHE_TTL.RAG_QUERY).catch(() => {});
+    }
+
+    // 10. Record usage metrics (fire-and-forget)
     this.metricsService.recordUsage({
       userId,
       tenantId: tenantId ?? 'unknown',
       endpoint: 'chat.send',
-      tokensOut: tokenCount,
+      tokensOut: finalTokenCount,
       latencyMs: Date.now() - startMs,
       cacheHit: false,
       model: 'gemini-1.5-flash',
@@ -189,21 +273,91 @@ export class ChatService {
     const historyExcludingLastUser = contextPackage.history.slice(0, -1);
 
     // 5. Build prompt
-    const systemPrompt = this.promptEngineService.buildSystemPrompt(
+    const systemPrompt = await this.promptEngineService.buildSystemPrompt(
       'study', // Default to study mode for regeneration
       retrievalResult.context,
       contextPackage.summary,
     );
 
-    // 6. Stream and Save
-    await this.streamFromAiService(
-      systemPrompt,
-      promptMessageText,
-      historyExcludingLastUser,
-      conversationId,
-      enrichedCitations,
-      res,
-    );
+    // 6. Fetch installed plugins for regeneration
+    let installedTools: any[] = [];
+    if (conversation.tenantId) {
+      installedTools = await this.marketplaceService.getInstalledPlugins(conversation.tenantId).catch(() => []);
+    }
+
+    const geminiTools = installedTools.map((t) => ({
+      name: t.key,
+      description: t.description,
+      parameters: t.inputSchema,
+    }));
+
+    // 7. Stream and Save supporting tool execution
+    let loopCount = 0;
+    const maxLoops = 5;
+    let activeMessage = promptMessageText;
+    let activeHistory = [...historyExcludingLastUser];
+    let activeCitations = [...enrichedCitations];
+
+    while (loopCount < maxLoops) {
+      loopCount++;
+
+      const streamResult = await this.streamFromAiService(
+        systemPrompt,
+        activeMessage,
+        activeHistory,
+        conversationId,
+        activeCitations,
+        res,
+        geminiTools,
+      );
+
+      if (streamResult.toolCall) {
+        const { name: toolName, args: toolArgs } = streamResult.toolCall;
+        res.write(`event: token\ndata: [Executing tool: ${toolName}...] \n\n`);
+
+        let toolResult: any;
+        try {
+          const plugin = installedTools.find((t) => t.key === toolName);
+          if (!plugin) {
+            throw new Error(`Tool ${toolName} is not installed`);
+          }
+
+          toolResult = await this.marketplaceService.executeInstalledPlugin({
+            organizationId: conversation.tenantId,
+            pluginId: plugin.id,
+            userId,
+            inputData: toolArgs,
+            conversationId,
+          });
+        } catch (err: any) {
+          toolResult = { error: err.message };
+        }
+
+        // Save tool call and response
+        await this.conversationService.saveMessage(
+          conversationId,
+          MessageRole.ASSISTANT,
+          JSON.stringify({ type: 'tool_call', name: toolName, args: toolArgs }),
+        );
+        await this.conversationService.saveMessage(
+          conversationId,
+          MessageRole.USER,
+          JSON.stringify({ type: 'tool_response', name: toolName, response: toolResult }),
+        );
+
+        activeHistory.push({
+          role: 'assistant',
+          content: JSON.stringify({ type: 'tool_call', name: toolName, args: toolArgs }),
+        });
+        activeHistory.push({
+          role: 'user',
+          content: JSON.stringify({ type: 'tool_response', name: toolName, response: toolResult }),
+        });
+
+        continue;
+      }
+      break;
+    }
   }
 
   private async streamFromAiService(
@@ -213,7 +367,8 @@ export class ChatService {
     conversationId: string,
     citations: Citation[],
     res: Response,
-  ): Promise<{ fullText: string; tokenCount: number }> {
+    tools?: any[],
+  ): Promise<{ fullText: string; tokenCount: number; toolCall: { name: string; args: any } | null }> {
     try {
       const response = await fetch(`${this.aiServiceUrl}/ai/chat/stream`, {
         method: 'POST',
@@ -224,6 +379,7 @@ export class ChatService {
           systemPrompt,
           message,
           history,
+          tools,
         }),
       });
 
@@ -231,13 +387,15 @@ export class ChatService {
         this.logger.error(`Failed to stream from AI service: ${response.statusText}`);
         res.write(`event: error\ndata: Failed to generate response\n\n`);
         res.end();
-        return { fullText: '', tokenCount: 0 };
+        return { fullText: '', tokenCount: 0, toolCall: null };
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let assistantResponse = '';
       let buffer = '';
+      let interceptedToolCall: { name: string; args: any } | null = null;
+      let currentEvent = 'message';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -248,31 +406,42 @@ export class ChatService {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('event: token')) {
-            // Forward event: token
-            res.write(`${line}\n`);
+          if (line.startsWith('event: ')) {
+            currentEvent = line.replace('event: ', '').trim();
           } else if (line.startsWith('data: ')) {
-            // Track accumulated response text
             const dataContent = line.replace('data: ', '').trim();
-            if (dataContent) {
+            if (currentEvent === 'tool_call') {
+              interceptedToolCall = JSON.parse(dataContent);
+              break;
+            } else if (currentEvent === 'token') {
               assistantResponse += dataContent;
+              res.write(`event: token\ndata: ${dataContent}\n\n`);
+            } else if (currentEvent === 'citation') {
+              res.write(`event: citation\ndata: ${dataContent}\n\n`);
+            } else if (currentEvent === 'done') {
+              // Wait to send done event in orchestrator loop
             }
-            res.write(`${line}\n`);
-          } else if (line.startsWith('event: done')) {
-            // Yield done event
-            res.write(`${line}\n`);
           } else if (line.trim() === '') {
             res.write('\n');
           }
         }
+
+        if (interceptedToolCall) {
+          await reader.cancel();
+          break;
+        }
       }
 
-      // Process any remainder in the buffer
-      if (buffer.trim()) {
+      // Process remainder
+      if (buffer.trim() && !interceptedToolCall) {
         res.write(`${buffer}\n\n`);
       }
 
-      // Save complete assistant message to Postgres
+      if (interceptedToolCall) {
+        return { fullText: '', tokenCount: 0, toolCall: interceptedToolCall };
+      }
+
+      // Save complete assistant message to Postgres if finished
       if (assistantResponse) {
         await this.conversationService.saveMessage(
           conversationId,
@@ -282,17 +451,17 @@ export class ChatService {
         );
       }
 
-      // End connection
+      // End connection if finished
       res.write(`event: done\ndata: {}\n\n`);
       res.end();
 
-      return { fullText: assistantResponse, tokenCount: Math.round(assistantResponse.length / 4) };
+      return { fullText: assistantResponse, tokenCount: Math.round(assistantResponse.length / 4), toolCall: null };
 
     } catch (err: any) {
       this.logger.error(`Error streaming from AI service: ${err.message}`);
       res.write(`event: error\ndata: Stream connection failure\n\n`);
       res.end();
-      return { fullText: '', tokenCount: 0 };
+      return { fullText: '', tokenCount: 0, toolCall: null };
     }
   }
 }

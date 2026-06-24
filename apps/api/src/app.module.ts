@@ -32,6 +32,33 @@ import { CommonModule } from "./common/common.module";
 import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.middleware";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 
+// Phase 3.0 SaaS Modules
+import { BillingModule } from "./billing/billing.module";
+import { UsageModule } from "./usage/usage.module";
+import { QuotaGuardModule } from "./quota-guard/quota-guard.module";
+import { TeamsModule } from "./teams/teams.module";
+import { ApiMonetizationModule } from "./api-monetization/api-monetization.module";
+import { AdminModule } from "./admin/admin.module";
+import { PricingModule } from "./pricing/pricing.module";
+import { FeatureFlagsModule } from "./feature-flags/feature-flags.module";
+import { WebhooksModule } from "./webhooks/webhooks.module";
+
+// Phase 3.1 Enterprise Security Modules
+import { SsoModule } from "./sso/sso.module";
+import { AuditModule } from "./audit/audit.module";
+import { SecurityGuardModule } from "./security-guard/security-guard.module";
+
+// Phase 3.2 AI Agent Marketplace Modules
+import { PluginRuntimeModule } from "./plugin-runtime/plugin-runtime.module";
+import { PluginsModule } from "./plugins/plugins.module";
+import { MarketplaceModule } from "./marketplace/marketplace.module";
+
+// Phase 3.3 Autonomous AI Ecosystem Modules
+import { PromptOptimizerModule } from "./prompt-optimizer/prompt-optimizer.module";
+import { ToolGeneratorModule } from "./tool-generator/tool-generator.module";
+import { LearningLoopModule } from "./learning-loop/learning-loop.module";
+import { AutonomousAgentModule } from "./autonomous-agent/autonomous-agent.module";
+
 @Controller("health")
 export class HealthController {
   private readonly aiServiceUrl: string;
@@ -125,6 +152,25 @@ export class HealthController {
     TutorModule,
     KnowledgeGraphModule,
     CommonModule,
+    BillingModule,
+    UsageModule,
+    QuotaGuardModule,
+    TeamsModule,
+    ApiMonetizationModule,
+    AdminModule,
+    PricingModule,
+    FeatureFlagsModule,
+    WebhooksModule,
+    SsoModule,
+    AuditModule,
+    SecurityGuardModule,
+    PluginRuntimeModule,
+    PluginsModule,
+    MarketplaceModule,
+    PromptOptimizerModule,
+    ToolGeneratorModule,
+    LearningLoopModule,
+    AutonomousAgentModule,
   ],
   controllers: [HealthController],
   providers: [

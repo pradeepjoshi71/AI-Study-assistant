@@ -7,6 +7,7 @@ import { CitationsModule } from '../citations/citations.module';
 import { PromptEngineModule } from '../prompt-engine/prompt-engine.module';
 import { ContextBuilderModule } from '../context-builder/context-builder.module';
 import { CommonModule } from '../common/common.module';
+import { MarketplaceModule } from '../marketplace/marketplace.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { CommonModule } from '../common/common.module';
     PromptEngineModule,
     ContextBuilderModule,
     CommonModule,
+    MarketplaceModule,
   ],
   controllers: [ChatController],
   providers: [ChatService],

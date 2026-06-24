@@ -1,12 +1,36 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class PromptEngineService {
-  buildSystemPrompt(
+  constructor(private readonly prisma: PrismaService) {}
+
+  async buildSystemPrompt(
     mode: 'study' | 'quiz' | 'flashcard',
     context: string,
     summary?: string,
-  ): string {
+  ): Promise<string> {
+    // 1. Fetch active prompt version from database
+    const dbTemplate = await this.prisma.promptTemplateVersion.findFirst({
+      where: { mode, isActive: true },
+    });
+
+    if (dbTemplate) {
+      let prompt = dbTemplate.systemPrompt;
+      
+      // Compile prompt replacing placeholders
+      prompt = prompt.replace('{{context}}', context || 'No documents available.');
+      
+      if (summary) {
+        prompt = prompt.replace('{{summary}}', `CONVERSATION SUMMARY SO FAR:\n${summary}`);
+      } else {
+        prompt = prompt.replace('{{summary}}', '');
+      }
+
+      return prompt.trim();
+    }
+
+    // 2. Fallback to hardcoded defaults if DB has no active template
     let modeInstruction = '';
 
     switch (mode) {

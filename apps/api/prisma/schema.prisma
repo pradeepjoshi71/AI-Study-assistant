@@ -47,6 +47,10 @@ model User {
   sessions         Session[]
   documents        Document[]
   conversations    Conversation[]
+  // Phase 3.0 — enterprise relations
+  organizationMemberships OrganizationMember[]
+  // Phase 3.1 — federated identity relations
+  identityProviders     IdentityProvider[]
 
   @@map("users")
 }
@@ -56,6 +60,9 @@ model Session {
   userId           String
   refreshTokenHash String   @unique
   expiresAt        DateTime
+  userAgent        String?
+  ipAddress        String?
+  lastActiveAt     DateTime @default(now())
   createdAt        DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -379,3 +386,693 @@ model CostTracking {
   @@map("cost_tracking")
 }
 
+// ─────────────────────────────────────────────
+// Phase 3.0 — Enterprise Expansion Layer
+// ─────────────────────────────────────────────
+
+// ─── NEW ENUMS ────────────────────────────────
+
+enum PlanType {
+  FREE
+  PRO
+  TEAM
+  ENTERPRISE
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  PAUSED
+  INCOMPLETE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum OrgMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum UsageEventType {
+  CHAT_MESSAGE
+  QUIZ_GENERATE
+  FLASHCARD_GENERATE
+  DOCUMENT_EMBED
+  DOCUMENT_PROCESS
+  API_REQUEST
+  STORAGE_UPLOAD
+  TUTOR_INSIGHT
+  KNOWLEDGE_GRAPH
+}
+
+// ─── BILLING DOMAIN ───────────────────────────
+
+/// Canonical plan definitions — owned by platform admins
+model Plan {
+  id          String      @id @default(uuid())
+  name        String      // "Free", "Pro", "Team", "Enterprise"
+  type        PlanType    @unique
+  description String?
+  isActive    Boolean     @default(true)
+
+  // Stripe
+  stripePriceIdMonthly String?
+  stripePriceIdYearly  String?
+
+  // Hard limits (null = unlimited)
+  maxUsers           Int?    // max seats per org
+  maxDocuments       Int?    // max docs per org
+  maxStorageGb       Float?  // max S3 storage
+  maxChatsPerDay     Int?    // daily chat quota
+  maxApiCallsPerDay  Int?    // daily API call quota
+  maxTokensPerMonth  Int?    // monthly LLM token budget
+
+  // Pricing (USD cents)
+  priceMonthlyUsdCents Int   @default(0)
+  priceYearlyUsdCents  Int   @default(0)
+
+  // Cost per unit (for usage-based billing, USD micro-cents)
+  costPerTokenMicro     Int  @default(0) // cost per 1000 tokens
+  costPerDocumentCents  Int  @default(0)
+  costPerApiCallMicro   Int  @default(0)
+  costPerGbStorageCents Int  @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+/// Billing tenant — represents a company/workspace (maps 1:1 to Stripe Customer)
+model Organization {
+  id               String   @id @default(uuid())
+  name             String
+  slug             String   @unique // URL-safe identifier
+  logoUrl          String?
+  domain           String?  // e.g. "acme.com" for SSO domain matching
+  isActive         Boolean  @default(true)
+  isSuspended      Boolean  @default(false)
+  suspendedReason  String?
+
+  // Stripe
+  stripeCustomerId String?  @unique
+
+  // Billing contact
+  billingEmail     String?
+  billingName      String?
+  taxId            String?
+
+  // Usage aggregates (denormalized for fast reads)
+  storageUsedBytes  BigInt  @default(0)
+
+  // Outbound Webhooks
+  webhookUrl       String?
+  webhookSecret    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members       OrganizationMember[]
+  invitations   Invitation[]
+  subscription  Subscription?
+  invoices      Invoice[]
+  apiKeys       ApiKey[]
+  featureFlags  TenantFeatureOverride[]
+  usageEvents   UsageEvent[]
+  auditLogs     AuditLog[]
+  ssoConfigurations SsoConfiguration[]
+  domains           Domain[]
+  securityEvents    SecurityEvent[]
+  pluginInstalls    PluginInstall[]
+  pluginUsageLogs   PluginUsageLog[]
+  autonomousActions AutonomousAction[]
+  aiGeneratedTools  AiGeneratedTool[]
+  learningMetrics   LearningMetric[]
+  aiTasks           AiTask[]
+  aiSchedules       AiSchedule[]
+
+  @@map("organizations")
+}
+
+model Subscription {
+  id             String             @id @default(uuid())
+  organizationId String             @unique
+  planId         String
+  status         SubscriptionStatus @default(TRIALING)
+  cycle          BillingCycle       @default(MONTHLY)
+
+  // Stripe
+  stripeSubscriptionId String?  @unique
+  stripeItemId         String?  // for quantity/usage-based items
+
+  // Dates
+  trialStartAt    DateTime?
+  trialEndAt      DateTime?
+  currentPeriodStart DateTime @default(now())
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean  @default(false)
+  canceledAt         DateTime?
+
+  // Usage-based billing snapshot for current period
+  currentPeriodChatsUsed    Int @default(0)
+  currentPeriodTokensUsed   Int @default(0)
+  currentPeriodApiCallsUsed Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         Plan         @relation(fields: [planId], references: [id])
+
+  @@index([stripeSubscriptionId])
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id             String        @id @default(uuid())
+  organizationId String
+  stripeInvoiceId String?      @unique
+  status         InvoiceStatus @default(DRAFT)
+  amountDueUsdCents  Int       @default(0)
+  amountPaidUsdCents Int       @default(0)
+  currency           String    @default("usd")
+  invoicePdfUrl      String?
+  hostedInvoiceUrl   String?
+  periodStart        DateTime?
+  periodEnd          DateTime?
+  dueDate            DateTime?
+  paidAt             DateTime?
+  createdAt          DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("invoices")
+}
+
+/// Idempotent Stripe event log — prevents double-processing webhooks
+model StripeEvent {
+  id          String   @id // Stripe event ID (evt_xxx) as PK for idempotency
+  type        String   // e.g. "customer.subscription.updated"
+  processedAt DateTime @default(now())
+  payload     Json     // raw Stripe event object
+
+  @@map("stripe_events")
+}
+
+// ─── USAGE DOMAIN ─────────────────────────────
+
+/// Raw usage events — high write volume, partitioned by tenantId + date
+model UsageEvent {
+  id             String         @id @default(uuid())
+  organizationId String
+  userId         String?        // null for API key calls
+  apiKeyId       String?
+  type           UsageEventType
+  tokensIn       Int            @default(0)
+  tokensOut      Int            @default(0)
+  costUsdMicro   Int            @default(0) // cost in USD micro-cents (1/1000 cent)
+  metadata       Json?          // model name, document id, etc.
+  createdAt      DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, type, createdAt])
+  @@index([organizationId, userId, createdAt])
+  @@map("usage_events")
+}
+
+/// Pre-aggregated usage rollups — computed by a background job every hour
+model UsageAggregate {
+  id             String   @id @default(uuid())
+  organizationId String
+  userId         String?
+  period         String   // "2024-06-24-14" (yyyy-mm-dd-HH, hourly) or "2024-06-24" (daily)
+  granularity    String   // "hourly" | "daily" | "monthly"
+
+  chatMessages        Int @default(0)
+  quizGenerations     Int @default(0)
+  flashcardGenerations Int @default(0)
+  documentProcesses   Int @default(0)
+  apiRequests         Int @default(0)
+  tokensIn            Int @default(0)
+  tokensOut           Int @default(0)
+  totalCostUsdMicro   Int @default(0)
+  storageBytes        BigInt @default(0)
+
+  computedAt DateTime @default(now())
+
+  @@unique([organizationId, userId, period, granularity])
+  @@index([organizationId, period])
+  @@map("usage_aggregates")
+}
+
+// ─── TEAMS DOMAIN ─────────────────────────────
+
+model OrganizationMember {
+  id             String        @id @default(uuid())
+  organizationId String
+  userId         String
+  role           OrgMemberRole @default(MEMBER)
+  joinedAt       DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model Invitation {
+  id             String           @id @default(uuid())
+  organizationId String
+  email          String           // invitee email
+  role           OrgMemberRole    @default(MEMBER)
+  token          String           @unique // signed invite token
+  status         InvitationStatus @default(PENDING)
+  invitedById    String           // userId of inviter
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([email, status])
+  @@index([token])
+  @@map("invitations")
+}
+
+// ─── API KEYS DOMAIN ──────────────────────────
+
+/// API keys stored as prefix + SHA-256 hash (never plaintext)
+model ApiKey {
+  id             String      @id @default(uuid())
+  organizationId String
+  name           String      // human-readable label
+  keyPrefix      String      // first 8 chars: "sk_live_" (shown in UI)
+  keyHash        String      @unique // SHA-256 of full key
+  status         ApiKeyStatus @default(ACTIVE)
+
+  // Permissions (which API products this key can access)
+  permissions    Json        // string[]: ["chat", "quiz", "flashcard", "analytics"]
+
+  // Quota overrides (null = use org plan limits)
+  dailyCallLimit Int?
+  monthlyTokenLimit Int?
+
+  // Usage tracking (denormalized for fast checks)
+  totalCallCount  Int      @default(0)
+  lastUsedAt      DateTime?
+
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdById String?   // userId
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  usageLogs    ApiUsageLog[]
+
+  @@index([organizationId, status])
+  @@map("api_keys")
+}
+
+model ApiUsageLog {
+  id       String   @id @default(uuid())
+  apiKeyId String
+  endpoint String
+  method   String
+  statusCode Int
+  tokensIn   Int    @default(0)
+  tokensOut  Int    @default(0)
+  latencyMs  Int    @default(0)
+  createdAt  DateTime @default(now())
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId, createdAt])
+  @@map("api_usage_logs")
+}
+
+// ─── FEATURE FLAGS DOMAIN ─────────────────────
+
+/// Global feature catalog
+model FeatureFlag {
+  id           String   @id @default(uuid())
+  key          String   @unique // e.g. "knowledge_graph", "tutor_agent"
+  description  String?
+  defaultValue Boolean  @default(false) // global default
+  enabledPlans Json     // PlanType[]: which plans get this by default
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  overrides TenantFeatureOverride[]
+
+  @@map("feature_flags")
+}
+
+/// Per-organization flag overrides (e.g. enterprise custom enablement)
+model TenantFeatureOverride {
+  id             String  @id @default(uuid())
+  organizationId String
+  featureFlagId  String
+  enabled        Boolean
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  featureFlag   FeatureFlag  @relation(fields: [featureFlagId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, featureFlagId])
+  @@map("tenant_feature_overrides")
+}
+
+// ─── ADMIN / AUDIT DOMAIN ─────────────────────
+
+/// Immutable audit log for compliance
+model AuditLog {
+  id             String   @id @default(uuid())
+  organizationId String?
+  actorId        String?  // userId or "system"
+  actorType      String   // "user" | "admin" | "system" | "api_key"
+  action         String   // "subscription.upgraded", "user.invited", etc.
+  resourceType   String?  // "subscription", "user", "api_key", etc.
+  resourceId     String?
+  correlationId  String?  // Tracing ID for request lifecycle
+  metadata       Json?    // before/after state diff
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
+
+model IdentityProvider {
+  id             String   @id @default(uuid())
+  userId         String
+  provider       String   // "GOOGLE" | "AZURE" | "OKTA" | "SAML"
+  providerUserId String   // Unique ID from identity provider
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("identity_providers")
+}
+
+model SsoConfiguration {
+  id             String   @id @default(uuid())
+  organizationId String
+  providerType   String   // "SAML" | "OIDC"
+  entryPoint     String   // IdP Sign-on URL
+  issuer         String   // Entity ID / Issuer URI
+  cert           String?  @db.Text // Public X.509 certificate for SAML signature validation
+  clientId       String?  // OIDC client ID
+  clientSecret   String?  // OIDC client secret
+  wellKnownUrl   String?  // OIDC metadata URL
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("sso_configurations")
+}
+
+model Domain {
+  id             String   @id @default(uuid())
+  organizationId String
+  domainName     String   @unique // e.g. "acme.com"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("domains")
+}
+
+model SecurityEvent {
+  id             String   @id @default(uuid())
+  userId         String?
+  organizationId String?
+  eventType      String   // "login_failed" | "geo_velocity_anomaly" | "brute_force" | "mfa_bypass"
+  severity       String   // "INFO" | "WARNING" | "CRITICAL"
+  ipAddress      String?
+  userAgent      String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
+  @@map("security_events")
+}
+
+model Plugin {
+  id                    String          @id @default(uuid())
+  key                   String          @unique // e.g. "wolfram_alpha"
+  name                  String
+  version               String
+  description           String
+  permissions           Json            // string[]: ["read_documents", "external_api_call"]
+  inputSchema           Json            // JSON Schema defining inputs
+  outputSchema          Json            // JSON Schema defining outputs
+  endpointUrl           String?         // URL for remote HTTP tool calls
+  scriptCode            String?         @db.Text // Sandboxed JS code (optional)
+  authType              String          @default("NONE") // "NONE" | "API_KEY" | "OAUTH"
+  priceMonthlyCents     Int             @default(0)
+  costPerExecutionCents Int             @default(0)
+  isActive              Boolean         @default(true)
+  authorId              String          // User ID of developer
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  installs              PluginInstall[]
+  usageLogs             PluginUsageLog[]
+  ratings               PluginRating[]
+
+  @@map("plugins")
+}
+
+model PluginInstall {
+  id             String   @id @default(uuid())
+  organizationId String
+  pluginId       String
+  installedById  String
+  config         Json?    // Encrypted API keys or credentials needed for the plugin
+  createdAt      DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plugin         Plugin       @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, pluginId])
+  @@map("plugin_installs")
+}
+
+model PluginUsageLog {
+  id             String   @id @default(uuid())
+  organizationId String
+  pluginId       String
+  userId         String?
+  conversationId String?
+  latencyMs      Int
+  statusCode     Int
+  costCents      Float    @default(0)
+  createdAt      DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plugin         Plugin       @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, pluginId])
+  @@map("plugin_usage_logs")
+}
+
+model PluginRating {
+  id        String   @id @default(uuid())
+  pluginId  String
+  userId    String
+  rating    Int      // 1 to 5
+  review    String?  @db.Text
+  createdAt DateTime @default(now())
+
+  plugin    Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@unique([pluginId, userId])
+  @@map("plugin_ratings")
+}
+
+enum AutonomousActionType {
+  PROMPT_UPDATE
+  PLUGIN_CREATE
+  OPTIMIZATION
+}
+
+enum AutonomousActionStatus {
+  PENDING_VALIDATION
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  DEPLOYED
+  FAILED
+  ROLLED_BACK
+}
+
+model AutonomousAction {
+  id             String                 @id @default(uuid())
+  organizationId String
+  actionType     AutonomousActionType
+  status         AutonomousActionStatus @default(PENDING_VALIDATION)
+  triggerReason  String                 @db.Text
+  proposalDetails Json                  // Proposed prompt, plugin spec, or param tuning
+  validationLogs String?                @db.Text
+  feedbackMsg    String?                @db.Text
+  approvedById   String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@map("autonomous_actions")
+}
+
+model AiGeneratedTool {
+  id             String                 @id @default(uuid())
+  organizationId String
+  name           String
+  key            String                 @unique
+  description    String
+  inputSchema    Json
+  outputSchema   Json
+  scriptCode     String                 @db.Text
+  testSuiteData  Json                   // Input/output pairs used for sandbox validation
+  status         AutonomousActionStatus @default(PENDING_VALIDATION)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("ai_generated_tools")
+}
+
+model LearningMetric {
+  id             String   @id @default(uuid())
+  organizationId String
+  metricName     String
+  value          Float
+  dimensions     Json?
+  createdAt      DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, metricName, createdAt])
+  @@map("learning_metrics")
+}
+
+model PromptTemplateVersion {
+  id             String   @id @default(uuid())
+  mode           String   // "study" | "quiz" | "flashcard"
+  version        Int
+  systemPrompt   String   @db.Text
+  isActive       Boolean  @default(false)
+  accuracyScore  Float?
+  tokenCount     Int?
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  @@unique([mode, version])
+  @@map("prompt_template_versions")
+}
+
+enum AiTaskStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model AiTask {
+  id             String       @id @default(uuid())
+  tenantId       String
+  type           String       // "CHAT", "EMBEDDING", "SUMMARIZATION", "REASONING", "BATCH"
+  status         AiTaskStatus @default(QUEUED)
+  costCents      Float        @default(0)
+  latencyMs      Int          @default(0)
+  inputData      Json
+  outputData     Json?
+  errorLogs      String?      @db.Text
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("ai_tasks")
+}
+
+model AiComputeLog {
+  id             String   @id @default(uuid())
+  executionId    String
+  model          String
+  tokensIn       Int      @default(0)
+  tokensOut      Int      @default(0)
+  costCents      Float    @default(0)
+  latencyMs      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([executionId])
+  @@map("ai_compute_logs")
+}
+
+model AiSchedule {
+  id             String   @id @default(uuid())
+  tenantId       String
+  cronExpression String
+  taskType       String   // "graph_update", "study_plan", "memory_summarization"
+  params         Json?
+  nextRun        DateTime
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("ai_schedules")
+}
