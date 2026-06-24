@@ -1,0 +1,5 @@
+{
+  "extends": "../../packages/shared-config/eslint.base.json",
+  "root": true,
+  "ignorePatterns": ["dist", "node_modules"]
+}

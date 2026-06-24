@@ -1,0 +1,7 @@
+{
+  "extends": [
+    "../../packages/shared-config/eslint.base.json"
+  ],
+  "root": true,
+  "ignorePatterns": [".next", "node_modules", "out"]
+}

@@ -1,0 +1,130 @@
+// Prisma Schema for AI Study Assistant Platform
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model User {
+  id               String           @id @default(uuid())
+  email            String           @unique
+  password         String
+  name             String?
+  avatar           String?
+  role             UserRole         @default(STUDENT)
+  subscriptionPlan SubscriptionPlan @default(FREE)
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  sessions         Session[]
+  documents        Document[]
+  conversations    Conversation[]
+
+  @@map("users")
+}
+
+model Session {
+  id               String   @id @default(uuid())
+  userId           String
+  refreshTokenHash String   @unique
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Document {
+  id                    String           @id @default(uuid())
+  userId                String
+  title                 String
+  originalName          String
+  fileType              String
+  mimeType              String
+  fileSize              Int
+  fileUrl               String
+  storageKey            String
+  status                DocumentStatus   @default(UPLOADED)
+  pageCount             Int
+  extractedTextLength   Int?
+  processingStartedAt   DateTime?
+  processingCompletedAt DateTime?
+  processingError       String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks                DocumentChunk[]
+
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id                 String          @id @default(uuid())
+  documentId         String
+  chunkIndex         Int
+  content            String          @db.Text
+  tokenCount         Int
+  metadata           Json
+  embeddingStatus    EmbeddingStatus @default(PENDING)
+  embeddingCreatedAt DateTime?
+  createdAt          DateTime        @default(now())
+  document           Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_chunks")
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  userId    String
+  title     String
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  role           MessageRole
+  content        String       @db.Text
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+enum EmbeddingStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}

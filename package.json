@@ -1,0 +1,26 @@
+{
+  "name": "ai-study-assistant",
+  "version": "1.0.0",
+  "description": "Production-grade AI Study Assistant Platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w @study-assistant/web",
+    "dev:api": "npm run start:dev -w @study-assistant/api",
+    "build:web": "npm run build -w @study-assistant/web",
+    "build:api": "npm run build -w @study-assistant/api",
+    "build:all": "npm run build -w @study-assistant/web && npm run build -w @study-assistant/api",
+    "lint": "npm run lint -ws",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\""
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.1.0",
+    "@typescript-eslint/parser": "^7.1.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.3.3"
+  }
+}
