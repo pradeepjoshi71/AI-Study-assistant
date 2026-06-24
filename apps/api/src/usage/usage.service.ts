@@ -3,8 +3,6 @@ import { UsageBufferService } from './usage-buffer.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { UsageEventType } from '@prisma/client';
-import { PlansService } from '../billing/plans.service';
-import { PlanType } from '@prisma/client';
 
 export interface TrackEventParams {
   organizationId: string;
@@ -27,7 +25,6 @@ export class UsageService {
     private readonly buffer: UsageBufferService,
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
-    private readonly plans: PlansService,
   ) {}
 
   // ─── Track usage event ────────────────────────────────────
