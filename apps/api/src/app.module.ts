@@ -59,6 +59,13 @@ import { ToolGeneratorModule } from "./tool-generator/tool-generator.module";
 import { LearningLoopModule } from "./learning-loop/learning-loop.module";
 import { AutonomousAgentModule } from "./autonomous-agent/autonomous-agent.module";
 
+// Phase 3.4 AI Operating System Layer
+import { AiOsModule } from "./ai-os/ai-os.module";
+
+// Phase 4.0 Global Ecosystem Metrics
+import { MetricsModule } from "./platform/metrics/metrics.module";
+
+
 @Controller("health")
 export class HealthController {
   private readonly aiServiceUrl: string;
@@ -171,6 +178,9 @@ export class HealthController {
     ToolGeneratorModule,
     LearningLoopModule,
     AutonomousAgentModule,
+    AiOsModule,
+    // Phase 4.0 — Global Ecosystem Metrics
+    MetricsModule,
   ],
   controllers: [HealthController],
   providers: [

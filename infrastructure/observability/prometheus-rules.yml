@@ -1,0 +1,270 @@
+---
+# ============================================================
+# PROMETHEUS ALERT RULES — Phase 4.0 Production SLOs
+# SLA targets: 99.99% uptime, p99 < 300ms, error rate < 0.01%
+# Integrates with PagerDuty + Slack via Alertmanager
+# ============================================================
+
+groups:
+  # ── API Service SLOs ────────────────────────────────────────────────────────
+  - name: api.slo.alerts
+    interval: 30s
+    rules:
+
+      # P99 latency SLO breach — critical
+      - alert: APIHighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_ms_bucket{service="api", status!~"4.."}[5m])) 
+            by (le, region)
+          ) > 300
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+          runbook: https://runbooks.studyassist.ai/api-high-latency
+        annotations:
+          summary: "API p99 latency above 300ms SLO in {{ $labels.region }}"
+          description: "API p99 latency is {{ $value | humanizeDuration }}ms for 2+ minutes. SLO breach imminent."
+          dashboard: "https://grafana.studyassist.ai/d/api-slo"
+
+      # P50 latency warning
+      - alert: APIHighLatencyP50
+        expr: |
+          histogram_quantile(0.50,
+            sum(rate(http_request_duration_ms_bucket{service="api"}[5m])) by (le)
+          ) > 150
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "API median latency elevated — p50 = {{ $value }}ms"
+
+      # Error rate SLO breach
+      - alert: APIHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{service="api", status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{service="api"}[5m]))
+          ) > 0.001  # 0.1% error rate SLO
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+          runbook: https://runbooks.studyassist.ai/api-error-rate
+        annotations:
+          summary: "API error rate {{ $value | humanizePercentage }} exceeds 0.1% SLO"
+          description: "High error rate detected for 1+ minutes. Check application logs."
+
+      # Uptime SLO (99.99% = < 52 min/year downtime)
+      - alert: APIUptimeSLOBreach
+        expr: |
+          avg_over_time(up{service="api"}[1h]) < 0.9999
+        for: 5m
+        labels:
+          severity: critical
+          pagerduty_critical: "true"
+        annotations:
+          summary: "API uptime SLO at risk — {{ $value | humanizePercentage }} over last hour"
+
+  # ── AI Service SLOs ─────────────────────────────────────────────────────────
+  - name: ai.slo.alerts
+    interval: 30s
+    rules:
+
+      # LLM streaming TTFB (time to first byte) > 1 second
+      - alert: AIStreamingTTFBHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(ai_streaming_ttfb_ms_bucket[5m])
+          ) > 1000
+        for: 3m
+        labels:
+          severity: warning
+          team: ai
+        annotations:
+          summary: "AI streaming TTFB p95 = {{ $value }}ms (SLO: < 1000ms)"
+          description: "LLM streaming time-to-first-byte is elevated. Check model router and caching."
+
+      # AI cost per query runaway detection
+      - alert: AICostPerQueryHigh
+        expr: |
+          rate(ai_token_cost_usd_total[5m]) / rate(ai_requests_total[5m]) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          team: ai
+        annotations:
+          summary: "AI cost per query = ${{ $value | printf \"%.4f\" }} (budget: < $0.05)"
+
+      # Cache hit ratio degradation
+      - alert: AICacheHitRatioLow
+        expr: |
+          rate(ai_cache_hits_total[10m])
+          /
+          (rate(ai_cache_hits_total[10m]) + rate(ai_cache_misses_total[10m]))
+          < 0.55
+        for: 5m
+        labels:
+          severity: warning
+          team: ai
+        annotations:
+          summary: "AI response cache hit ratio {{ $value | humanizePercentage }} below 55% target"
+
+      # AI inference queue depth
+      - alert: AIQueueDepthHigh
+        expr: sum(redis_list_length{queue="bull:ai-inference:wait"}) > 100
+        for: 2m
+        labels:
+          severity: critical
+          team: ai
+        annotations:
+          summary: "AI inference queue depth = {{ $value }} jobs waiting (> 100 threshold)"
+          description: "Workers may be overwhelmed or KEDA autoscaling is lagging. Check ECS/EKS capacity."
+
+  # ── Database SLOs ───────────────────────────────────────────────────────────
+  - name: database.alerts
+    interval: 60s
+    rules:
+
+      # Aurora replication lag > 5 seconds
+      - alert: AuroraReplicationLagHigh
+        expr: |
+          aws_rds_aurora_replica_lag_average{region!="us-east-1"} > 5000
+        for: 2m
+        labels:
+          severity: critical
+          team: data
+          runbook: https://runbooks.studyassist.ai/aurora-replication-lag
+        annotations:
+          summary: "Aurora replication lag {{ $value }}ms in {{ $labels.region }} exceeds 5s RPO target"
+
+      # RDS connections approaching limit
+      - alert: RDSConnectionsHigh
+        expr: |
+          aws_rds_database_connections_average > 800
+        for: 3m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "RDS connection count {{ $value }} approaching max_connections limit"
+          description: "Consider enabling PgBouncer connection pooling or scaling instance."
+
+      # Database deadlocks
+      - alert: RDSDeadlocksDetected
+        expr: rate(pg_stat_database_deadlocks[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "PostgreSQL deadlocks detected: {{ $value }} per second"
+
+  # ── Redis / ElastiCache SLOs ─────────────────────────────────────────────────
+  - name: redis.alerts
+    interval: 30s
+    rules:
+
+      - alert: RedisMemoryHigh
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis memory usage at {{ $value | humanizePercentage }} in {{ $labels.region }}"
+          description: "Consider eviction policy tuning or scaling Redis cluster."
+
+      - alert: RedisGlobalReplicationLag
+        expr: |
+          redis_global_replication_lag_seconds > 10
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Redis global replication lag {{ $value }}s in {{ $labels.region }}"
+
+  # ── Business KPIs — Investor Metrics ─────────────────────────────────────────
+  - name: business.kpi.alerts
+    interval: 300s   # Every 5 minutes
+    rules:
+
+      # MRR anomaly detection — sudden drop signals churn event
+      - alert: MRRDropDetected
+        expr: |
+          (
+            platform_mrr_usd - platform_mrr_usd offset 1h
+          ) / platform_mrr_usd offset 1h < -0.05  # > 5% MRR drop in 1 hour
+        for: 5m
+        labels:
+          severity: critical
+          team: business
+          pagerduty_critical: "true"
+        annotations:
+          summary: "MRR dropped {{ $value | humanizePercentage }} in last hour — churn event?"
+          description: "Investigate subscription cancellations and payment failures."
+
+      # Churn rate spike
+      - alert: ChurnRateSpike
+        expr: |
+          rate(platform_subscription_cancellations_total[1h]) > 5
+        for: 15m
+        labels:
+          severity: warning
+          team: business
+        annotations:
+          summary: "Subscription cancellation rate {{ $value }}/hr is elevated"
+
+      # Trial conversion rate drop
+      - alert: TrialConversionRateLow
+        expr: |
+          rate(platform_trial_conversions_total[24h])
+          /
+          rate(platform_trials_started_total[24h]) < 0.10  # < 10% conversion
+        for: 1h
+        labels:
+          severity: warning
+          team: growth
+        annotations:
+          summary: "Trial-to-paid conversion rate {{ $value | humanizePercentage }} below 10% target"
+
+  # ── Security Alerts ───────────────────────────────────────────────────────────
+  - name: security.alerts
+    interval: 30s
+    rules:
+
+      - alert: AnomalousAPICallPattern
+        expr: |
+          rate(http_requests_total{service="api"}[1m]) > 1000
+        for: 30s
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Anomalous request rate {{ $value }} req/min — possible DDoS or abuse"
+
+      - alert: AuthenticationFailureSpike
+        expr: |
+          rate(auth_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Authentication failures spiking: {{ $value }}/min"
+          description: "Could indicate brute-force attack or credential stuffing."
+
+      - alert: SuspiciousTenantActivity
+        expr: |
+          rate(audit_events_total{action="bulk_export"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Bulk data export detected for tenant {{ $labels.tenant_id }}"

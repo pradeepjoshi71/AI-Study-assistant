@@ -1,0 +1,239 @@
+---
+# ============================================================
+# GLOBAL KUBERNETES — POD DISRUPTION BUDGETS
+# Ensures zero-downtime deployments + rolling updates
+# Guarantees minimum availability during node maintenance
+# ============================================================
+
+# API service — always keep 2 pods up during disruptions
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-pdb
+  namespace: api
+  labels:
+    app: api
+    phase: "4.0-global"
+spec:
+  # Allows at most 1 pod to be disrupted at any time
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: api
+
+---
+# AI Service — GPU-aware: minimum 1 always available
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-service-pdb
+  namespace: ai
+  labels:
+    app: ai-service
+    phase: "4.0-global"
+spec:
+  # AI service has fewer pods (expensive) — keep 50% minimum
+  minAvailable: "50%"
+  selector:
+    matchLabels:
+      app: ai-service
+
+---
+# Worker service — queue-driven: allow full disruption if queue empty
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: worker-pdb
+  namespace: workers
+  labels:
+    app: worker
+    phase: "4.0-global"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: worker
+
+---
+# ============================================================
+# GLOBAL KUBERNETES — KEDA SCALED OBJECTS
+# Queue-depth + latency + custom metrics autoscaling
+# ============================================================
+
+# API pods: scale on HTTP request rate via KEDA HTTP add-on
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: api-http-scaledobject
+  namespace: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  pollingInterval:  15      # Check every 15 seconds
+  cooldownPeriod:   180     # 3 minute cooldown before scale-in
+  minReplicaCount:  3       # Never drop below 3 (HA requirement)
+  maxReplicaCount:  200     # 1M user scale upper bound
+  
+  # Stabilization — prevent flapping
+  advanced:
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300   # 5 min scale-down window
+          policies:
+            - type: Percent
+              value: 10    # Max 10% reduction per period
+              periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 30    # Fast scale-up
+          policies:
+            - type: Percent
+              value: 100   # Can double pod count instantly
+              periodSeconds: 30
+            - type: Pods
+              value: 10    # Or add 10 pods flat
+              periodSeconds: 30
+          selectPolicy: Max
+
+  triggers:
+    # CPU utilization target
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "60"
+    # Memory utilization
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "75"
+    # p99 latency from Prometheus (> 500ms triggers scale-up)
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+        metricName: api_latency_p99_ms
+        query: |
+          histogram_quantile(0.99, 
+            rate(http_request_duration_ms_bucket{
+              service="api", 
+              status!~"4.."
+            }[2m])
+          )
+        threshold: "500"
+
+---
+# AI Worker pods: scale on Redis queue depth (BullMQ jobs waiting)
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: ai-worker-scaledobject
+  namespace: workers
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worker
+  pollingInterval:  10      # Faster polling for AI queue (time-sensitive)
+  cooldownPeriod:   300     # 5 min cooldown (LLM tasks take time)
+  minReplicaCount:  1
+  maxReplicaCount:  64      # 64 AI workers at 1M user peak
+
+  triggers:
+    # Scale up when > 5 jobs waiting per worker
+    - type: redis
+      authenticationRef:
+        name: redis-auth
+      metadata:
+        address: "redis-cluster.internal:6379"
+        listName: "bull:ai-inference:wait"
+        listLength: "5"
+        enableTLS: "true"
+    # Also scale on active (in-flight) jobs
+    - type: redis
+      authenticationRef:
+        name: redis-auth
+      metadata:
+        address: "redis-cluster.internal:6379"
+        listName: "bull:ai-inference:active"
+        listLength: "3"
+        enableTLS: "true"
+
+---
+# Document processing workers: scale on document ingestion queue
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: document-worker-scaledobject
+  namespace: workers
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: document-worker
+  pollingInterval:  20
+  cooldownPeriod:   120
+  minReplicaCount:  0     # Can scale to zero when no documents
+  maxReplicaCount:  20
+
+  triggers:
+    - type: redis
+      authenticationRef:
+        name: redis-auth
+      metadata:
+        address: "redis-cluster.internal:6379"
+        listName: "bull:document-processing:wait"
+        listLength: "2"
+        enableTLS: "true"
+
+---
+# Redis TriggerAuthentication
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: redis-auth
+  namespace: workers
+spec:
+  secretTargetRef:
+    - parameter: password
+      name: redis-credentials
+      key: password
+
+---
+# ============================================================
+# TOPOLOGY SPREAD CONSTRAINTS — Anti-affinity across AZs
+# Applied via namespace-level default pod spec
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: global-topology-config
+  namespace: api
+data:
+  topology-policy: |
+    # Pod topology spread — distribute across AZs for HA
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: api
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: api
+    
+    # Anti-affinity — prefer different nodes
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: api
