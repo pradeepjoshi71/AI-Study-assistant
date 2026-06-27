@@ -98,15 +98,16 @@ export default function AiOsPage() {
   }, []);
 
   const loadTelemetry = async (activeToken: string | null) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     setLoading(true);
     try {
       if (activeToken) {
         // Fetch Telemetry & status
-        const resStatus = await fetch('http://localhost:3001/api/ai-os/status', {
+        const resStatus = await fetch(`${apiUrl}/ai-os/status`, {
           headers: { Authorization: `Bearer ${activeToken}` },
         });
         // Fetch schedules
-        const resSchedules = await fetch('http://localhost:3001/api/ai-os/schedules', {
+        const resSchedules = await fetch(`${apiUrl}/ai-os/schedules`, {
           headers: { Authorization: `Bearer ${activeToken}` },
         });
 
@@ -157,8 +158,9 @@ export default function AiOsPage() {
     }
 
     try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
       if (token) {
-        const res = await fetch('http://localhost:3001/api/ai-os/execute', {
+        const res = await fetch(`${apiUrl}/ai-os/execute`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -274,8 +276,9 @@ export default function AiOsPage() {
         return;
       }
 
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
       if (token) {
-        const res = await fetch('http://localhost:3001/api/ai-os/schedule', {
+        const res = await fetch(`${apiUrl}/ai-os/schedule`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -320,8 +323,9 @@ export default function AiOsPage() {
   // Remove Job Schedule
   const handleUnschedule = async (id: string) => {
     try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
       if (token) {
-        const res = await fetch(`http://localhost:3001/api/ai-os/schedule/${id}`, {
+        const res = await fetch(`${apiUrl}/ai-os/schedule/${id}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
         });

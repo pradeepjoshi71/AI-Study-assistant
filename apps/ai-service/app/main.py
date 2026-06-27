@@ -65,8 +65,9 @@ from app.services.vector_search import VectorSearchService
 from app.services.reranker import RerankerService
 from app.services.context_builder import ContextBuilderService
 from app.services.llm import LLMOrchestrator
+from app.services.citation_engine import build_citations
 
-db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres_secure_pass@localhost:5432/study_assistant?schema=public")
+db_url = settings.DATABASE_URL
 if db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
@@ -87,6 +88,8 @@ class RagSearchRequest(BaseModel):
 @app.post("/ai/rag/search")
 def ai_rag_search(req: RagSearchRequest):
     logger.info(f"RAG search query received: '{req.query}' for user: {req.userId}")
+    import time
+    start_time = time.time()
     db = SessionLocal()
     try:
         # 1. Generate query embedding
@@ -111,8 +114,16 @@ def ai_rag_search(req: RagSearchRequest):
         # 4. Compile merged context, unique sources and page references
         context_package = context_builder.build_context(reranked_chunks, db)
 
+        # 5. Build structured citations from reranked chunks
+        citations = build_citations(reranked_chunks)
+
+        latency_ms = (time.time() - start_time) * 1000
+        token_estimate = len(context_package["context"]) // 4
+        logger.info(f"RAG Search: {latency_ms:.2f}ms | retrieved={len(retrieved_chunks)} reranked={len(reranked_chunks)} tokens≈{token_estimate} citations={len(citations)}")
+
         return {
             "chunks": reranked_chunks,
+            "citations": citations,
             "context": context_package["context"],
             "sources": context_package["sources"],
             "pages": context_package["pages"]
@@ -128,33 +139,6 @@ def ai_rag_search(req: RagSearchRequest):
         }
     finally:
         db.close()
-
-from fastapi.responses import StreamingResponse
-
-class ChatStreamRequest(BaseModel):
-    systemPrompt: str
-    message: str
-    history: List[Dict[str, str]] = []
-
-@app.post("/ai/chat/stream")
-async def ai_chat_stream(req: ChatStreamRequest):
-    logger.info("AI chat stream request received.")
-    
-    async def event_generator():
-        try:
-            async for token in llm_orchestrator.stream_chat(
-                system_prompt=req.systemPrompt,
-                message=req.message,
-                history=req.history
-            ):
-                # Yield SSE event format
-                yield f"event: token\ndata: {token}\n\n"
-            yield "event: done\ndata: {}\n\n"
-        except Exception as e:
-            logger.error(f"Error in event_generator: {e}")
-            yield f"event: error\ndata: {str(e)}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 class SummarizeRequest(BaseModel):
     messages: List[Dict[str, str]]

@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { QuizService } from '../quiz/quiz.service';
 import { FlashcardService } from '../flashcards/flashcards.service';
 import { QuizDifficulty } from '../quiz/quiz.types';

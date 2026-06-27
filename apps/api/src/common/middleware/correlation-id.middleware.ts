@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 
 /** Extends Express Request to carry the correlation ID */
 declare global {
+// eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       correlationId?: string;

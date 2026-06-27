@@ -1,7 +1,10 @@
 import { Module, Get, Controller, MiddlewareConsumer, NestModule } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
-import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
+import { ThrottlerModule } from "@nestjs/throttler";
+import { EventEmitterModule } from "@nestjs/event-emitter";
+import { RedisThrottlerStorage } from "./common/throttler/redis-throttler-storage";
+import { TieredThrottlerGuard } from "./common/throttler/tiered-throttler.guard";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RedisModule } from "./redis/redis.module";
 import { PrismaService } from "./prisma/prisma.service";
@@ -128,12 +131,31 @@ export class HealthController {
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000,
-        limit: 100, // Default global limit of 100 requests per 1 minute
-      },
-    ]),
+    EventEmitterModule.forRoot(),
+    ThrottlerModule.forRootAsync({
+      imports: [RedisModule],
+      inject: [RedisService],
+      useFactory: (redisService: RedisService) => ({
+        storage: new RedisThrottlerStorage(redisService),
+        throttlers: [
+          {
+            name: "free",
+            ttl: 60000,
+            limit: 10,
+          },
+          {
+            name: "pro",
+            ttl: 60000,
+            limit: 60,
+          },
+          {
+            name: "premium",
+            ttl: 60000,
+            limit: 200,
+          },
+        ],
+      }),
+    }),
     PrismaModule,
     RedisModule,
     AuthModule,
@@ -186,7 +208,7 @@ export class HealthController {
   providers: [
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: TieredThrottlerGuard,
     },
     {
       provide: APP_INTERCEPTOR,

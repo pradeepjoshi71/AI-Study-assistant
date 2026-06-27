@@ -1,13 +1,24 @@
+import json
 import logging
 import re
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import google.generativeai as genai
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
+from app.services.graph_store import persist_graph_results, get_concept_graph
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# DB session
+_db_url = settings.DATABASE_URL
+if _db_url.startswith("postgresql://"):
+    _db_url = _db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+_engine = create_engine(_db_url, pool_pre_ping=True)
+_Session = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
 
 # ─────────────────────────────────────────────
@@ -217,6 +228,25 @@ Respond with JSON only: {{ "concepts": [...], "relations": [...] }}
         f"Graph extraction complete for tenant={req.tenantId}: "
         f"{total_concepts} concepts extracted across {len(results)} chunks."
     )
+
+    # ── Phase 2.1.9: Persist nodes, edges, and chunk maps to PostgreSQL ─────
+    db = _Session()
+    try:
+        chunk_dicts = [
+            {
+                "chunkId": r.chunkId,
+                "concepts": [c.model_dump() for c in r.concepts],
+                "relations": [rel.model_dump() for rel in r.relations],
+            }
+            for r in results
+        ]
+        stats = persist_graph_results(db=db, tenant_id=req.tenantId, chunk_results=chunk_dicts)
+        logger.info(f"[graph] persist stats: {stats}")
+    except Exception as e:
+        logger.warning(f"[graph] persist failed (extraction result still returned): {e}")
+    finally:
+        db.close()
+
     return GraphExtractResponse(results=results)
 
 
@@ -261,3 +291,52 @@ async def explain_concept(req: GraphExplainRequest):
     except Exception as e:
         logger.error(f"Gemini concept explanation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Concept explanation failed: {str(e)}")
+
+
+# ── Phase 2.1.9: Stored graph query ───────────────────────────────────────────
+
+class GraphQueryRequest(BaseModel):
+    tenantId: str
+    concept: str          # normalized lowercase concept name
+    depth: int = 1        # hop depth: 1 = immediate neighbours
+
+class GraphNode(BaseModel):
+    id: str
+    name: str
+    displayName: str
+    confidence: float
+
+class GraphEdge(BaseModel):
+    fromConceptId: str
+    toConceptId: str
+    relationType: str     # EXPLAINS | RELATED_TO | PREREQUISITE_OF | PART_OF
+    weight: float
+
+class GraphQueryResponse(BaseModel):
+    nodes: List[GraphNode]
+    edges: List[GraphEdge]
+
+@router.post("/graph/query", response_model=GraphQueryResponse)
+def query_concept_graph(req: GraphQueryRequest):
+    """
+    Returns the stored subgraph around a concept from PostgreSQL.
+    Traverses up to `depth` hops of outgoing ConceptRelation edges.
+    """
+    logger.info(f"[graph] query: concept='{req.concept}' depth={req.depth} tenant={req.tenantId}")
+    db = _Session()
+    try:
+        subgraph = get_concept_graph(
+            db=db,
+            tenant_id=req.tenantId,
+            concept_name=req.concept.strip().lower(),
+            depth=max(1, min(req.depth, 3)),   # cap at 3 hops
+        )
+        return GraphQueryResponse(
+            nodes=[GraphNode(**n) for n in subgraph["nodes"]],
+            edges=[GraphEdge(**e) for e in subgraph["edges"]],
+        )
+    except Exception as e:
+        logger.error(f"[graph] query failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()

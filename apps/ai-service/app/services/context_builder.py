@@ -35,13 +35,22 @@ class ContextBuilderService:
         # Sort chunks by documentId and chunkIndex to maintain reading flow if possible
         unique_chunks.sort(key=lambda x: (x["documentId"], x["chunkIndex"]))
 
-        # 2. Merge chunk contents
+        # 2. Merge chunk contents respecting token budget
+        MAX_TOKENS = 8000
+        current_tokens = 0
         context_parts = []
         doc_ids = set()
         page_refs = set()
 
         for chunk in unique_chunks:
-            context_parts.append(chunk["content"])
+            content = chunk["content"]
+            chunk_tokens = len(content) // 4
+            if current_tokens + chunk_tokens > MAX_TOKENS:
+                logger.warning(f"RAG context token limit ({MAX_TOKENS}) reached. Truncating context.")
+                break
+            
+            current_tokens += chunk_tokens
+            context_parts.append(content)
             doc_ids.add(chunk["documentId"])
             
             # Record page references

@@ -51,9 +51,13 @@ export class StreamService {
       let buffer = '';
       let accumulatedText = '';
 
-      while (true) {
+      let isDone = false;
+      while (!isDone) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          isDone = true;
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');

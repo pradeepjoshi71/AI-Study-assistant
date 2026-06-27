@@ -7,7 +7,6 @@ import {
   Body,
   Param,
   UseGuards,
-  ForbiddenException,
 } from '@nestjs/common';
 import { PluginsService } from './plugins.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';

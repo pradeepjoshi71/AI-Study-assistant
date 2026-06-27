@@ -1,14 +1,32 @@
+import json
 import logging
+import uuid
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import google.generativeai as genai
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
+from app.db.models import Quiz, StoredQuizQuestion, FlashcardDeck, StoredFlashcard
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# --- Schemas ---
+# ── DB session (reuse main engine config) ─────────────────────────────────────
+_db_url = settings.DATABASE_URL
+if _db_url.startswith("postgresql://"):
+    _db_url = _db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+_engine = create_engine(_db_url, pool_pre_ping=True)
+_Session = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+
+_HAS_GEMINI = bool(
+    settings.GEMINI_API_KEY
+    and settings.GEMINI_API_KEY != "your_gemini_api_key_here"
+    and settings.GEMINI_API_KEY.strip()
+)
+
+# ── Schemas ───────────────────────────────────────────────────────────────────
 
 class ChunkItem(BaseModel):
     chunkId: str
@@ -18,15 +36,16 @@ class ChunkItem(BaseModel):
     pageNumber: int
     documentTitle: str
 
-# Quiz Generation Input/Output
 class GenerateQuizRequest(BaseModel):
     query: str
     chunks: List[ChunkItem]
-    difficulty: str  # easy | medium | hard
+    difficulty: str          # easy | medium | hard
     count: int
+    userId: str = "anonymous"
+    conversationId: Optional[str] = None
 
 class QuizQuestion(BaseModel):
-    type: str  # MCQ | TRUE_FALSE | SHORT_ANSWER
+    type: str                # MCQ | TRUE_FALSE | SHORT_ANSWER
     question: str
     options: Optional[List[str]] = None
     answer: str
@@ -34,12 +53,15 @@ class QuizQuestion(BaseModel):
     chunkIdSource: str
 
 class QuizGenerationResponse(BaseModel):
+    quizId: str
     questions: List[QuizQuestion]
+    documentIds: List[str]   # unique document IDs covered by this quiz
 
-# Flashcard Generation Input/Output
 class GenerateFlashcardsRequest(BaseModel):
     chunks: List[ChunkItem]
-    mode: str  # basic | exam | revision
+    mode: str                # basic | exam | revision
+    userId: str = "anonymous"
+    conversationId: Optional[str] = None
 
 class FlashcardItem(BaseModel):
     front: str
@@ -48,194 +70,243 @@ class FlashcardItem(BaseModel):
     tags: List[str]
 
 class FlashcardGenerationResponse(BaseModel):
+    deckId: str
     flashcards: List[FlashcardItem]
+    documentIds: List[str]   # unique document IDs covered by this deck
 
 
-# --- Endpoints ---
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _unique_doc_ids(chunks: List[ChunkItem]) -> List[str]:
+    seen, out = set(), []
+    for c in chunks:
+        if c.documentId not in seen:
+            seen.add(c.documentId)
+            out.append(c.documentId)
+    return out
+
+def _persist_quiz(
+    questions: List[QuizQuestion],
+    req: GenerateQuizRequest,
+    doc_ids: List[str],
+) -> str:
+    """Saves quiz + questions to PostgreSQL; returns quiz ID."""
+    quiz_id = str(uuid.uuid4())
+    title = f"Quiz: {req.query[:60]}" if req.query else "Generated Quiz"
+    db = _Session()
+    try:
+        quiz = Quiz(
+            id=quiz_id,
+            userId=req.userId,
+            tenantId="default",
+            conversationId=req.conversationId,
+            title=title,
+            difficulty=req.difficulty,
+        )
+        db.add(quiz)
+        for q in questions:
+            db.add(StoredQuizQuestion(
+                id=str(uuid.uuid4()),
+                quizId=quiz_id,
+                type=q.type,
+                question=q.question,
+                options=q.options,
+                answer=q.answer,
+                explanation=q.explanation,
+                chunkIdSource=q.chunkIdSource,
+            ))
+        db.commit()
+        logger.info(f"Quiz {quiz_id} persisted ({len(questions)} questions, docs={doc_ids})")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Quiz persistence failed: {e}")
+        quiz_id = "unsaved"
+    finally:
+        db.close()
+    return quiz_id
+
+def _persist_deck(
+    flashcards: List[FlashcardItem],
+    req: GenerateFlashcardsRequest,
+    doc_ids: List[str],
+) -> str:
+    """Saves flashcard deck + cards to PostgreSQL; returns deck ID."""
+    deck_id = str(uuid.uuid4())
+    title = f"Flashcards ({req.mode}) – {', '.join(doc_ids[:2])}"
+    db = _Session()
+    try:
+        deck = FlashcardDeck(
+            id=deck_id,
+            userId=req.userId,
+            tenantId="default",
+            conversationId=req.conversationId,
+            title=title,
+        )
+        db.add(deck)
+        for fc in flashcards:
+            db.add(StoredFlashcard(
+                id=str(uuid.uuid4()),
+                deckId=deck_id,
+                front=fc.front,
+                back=fc.back,
+                chunkIdSource=fc.chunkIdSource,
+                tags=fc.tags,
+            ))
+        db.commit()
+        logger.info(f"Deck {deck_id} persisted ({len(flashcards)} cards, docs={doc_ids})")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Deck persistence failed: {e}")
+        deck_id = "unsaved"
+    finally:
+        db.close()
+    return deck_id
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/study/quiz/generate", response_model=QuizGenerationResponse)
 async def generate_quiz(req: GenerateQuizRequest):
-    logger.info(f"Generating quiz questions: count={req.count}, difficulty={req.difficulty}...")
-    
-    if not req.chunks:
-        return QuizGenerationResponse(questions=[])
+    logger.info(f"Generating quiz: count={req.count}, difficulty={req.difficulty}")
+    doc_ids = _unique_doc_ids(req.chunks)
 
-    # 1. Format source excerpts
+    if not req.chunks:
+        return QuizGenerationResponse(quizId="empty", questions=[], documentIds=[])
+
     formatted_excerpts = "\n\n".join([
         f"Excerpt from '{c.documentTitle}' (Page {c.pageNumber}) [Chunk ID: {c.chunkId}]:\n{c.text}"
         for c in req.chunks
     ])
 
-    has_gemini = bool(settings.GEMINI_API_KEY and settings.GEMINI_API_KEY != "your_gemini_api_key_here" and settings.GEMINI_API_KEY.strip() != "")
-
-    if not has_gemini:
-        # Mock Quiz Generation logic for testing / fallback mode
-        logger.info("GEMINI_API_KEY is missing. Returning mock quiz questions.")
-        mock_questions = []
-        
-        # Create mock questions from chunks
+    # ── Mock path ─────────────────────────────────────────────────────────────
+    if not _HAS_GEMINI:
+        logger.info("Mock quiz generation (no Gemini key).")
+        questions: List[QuizQuestion] = []
         for i in range(min(req.count, len(req.chunks))):
-            chunk = req.chunks[i]
-            question_text = f"According to '{chunk.documentTitle}', what is discussed on page {chunk.pageNumber}?"
-            snippet = chunk.text[:80] + "..."
-            
-            if i % 3 == 0:
-                mock_questions.append(QuizQuestion(
-                    type="MCQ",
-                    question=question_text,
-                    options=[snippet, "Incorrect option A", "Incorrect option B", "Incorrect option C"],
-                    answer=snippet,
-                    explanation=f"The text explicitly says: '{chunk.text[:120]}...'",
-                    chunkIdSource=chunk.chunkId
-                ))
-            elif i % 3 == 1:
-                mock_questions.append(QuizQuestion(
-                    type="TRUE_FALSE",
-                    question=f"True or False: The text discusses the following concept: '{chunk.text[:60]}'",
-                    options=["True", "False"],
-                    answer="True",
-                    explanation="This is true based on the provided text.",
-                    chunkIdSource=chunk.chunkId
-                ))
-            else:
-                mock_questions.append(QuizQuestion(
-                    type="SHORT_ANSWER",
-                    question=f"Complete this statement: {question_text}",
-                    answer=snippet,
-                    explanation="Re-read the text for detailed confirmation.",
-                    chunkIdSource=chunk.chunkId
-                ))
+            c = req.chunks[i]
+            snippet = c.text[:80] + "..."
+            q_text = f"According to '{c.documentTitle}' (p.{c.pageNumber}), describe the main concept."
+            q_type = ["MCQ", "SHORT_ANSWER", "TRUE_FALSE"][i % 3]
+            opts = [snippet, "Incorrect A", "Incorrect B", "Incorrect C"] if q_type == "MCQ" else \
+                   (["True", "False"] if q_type == "TRUE_FALSE" else None)
+            questions.append(QuizQuestion(
+                type=q_type,
+                question=q_text,
+                options=opts,
+                answer=snippet,
+                explanation=f"The text says: '{c.text[:120]}'",
+                chunkIdSource=c.chunkId,
+            ))
+        quiz_id = _persist_quiz(questions, req, doc_ids)
+        return QuizGenerationResponse(quizId=quiz_id, questions=questions, documentIds=doc_ids)
 
-        return QuizGenerationResponse(questions=mock_questions)
-
+    # ── Gemini path ───────────────────────────────────────────────────────────
     try:
         genai.configure(api_key=settings.GEMINI_API_KEY)
+        prompt = f"""You are an elite academic curriculum designer. Generate exactly {req.count} quiz questions on: "{req.query}".
+Use ONLY the source excerpts below. Do NOT use external knowledge.
+Every question must cite its chunkIdSource.
+Difficulty: {req.difficulty}
+  - easy: direct fact-based (definitions, dates, numbers)
+  - medium: conceptual understanding (why, how, relationships)
+  - hard: application/inference across multiple chunks
 
-        # 2. Compile prompt for Gemini
-        prompt = f"""You are an elite academic curriculum designer and Study Assistant. Your task is to generate a high-quality, RAG-grounded quiz on the topic: "{req.query}".
-The quiz must contain exactly {req.count} questions.
-All questions must be strictly based on the provided source excerpts. Do not use any external knowledge. If the excerpts do not contain enough facts to generate a question, simplify or skip.
-Every question must cite its source chunk ID in 'chunkIdSource'.
-
-Difficulty Level constraints:
-- easy: Generate direct, fact-based questions (e.g. key terms, definitions, specific dates or numbers directly stated in the context).
-- medium: Generate questions testing conceptual understanding (e.g. explaining "why", summarizing sections, or understanding relationships).
-- hard: Generate questions requiring application and inference across multiple chunks or documents (e.g. synthesizing facts, drawing conclusions, comparing details).
-
-Choose question types among: MCQ (Multiple Choice with 4 options), TRUE_FALSE, and SHORT_ANSWER.
+Use question types: MCQ (4 options), TRUE_FALSE, SHORT_ANSWER.
+Distribute types across all three where possible.
 
 Source Excerpts:
 {formatted_excerpts}
 
-You must respond with a JSON object containing a 'questions' list matching the requested response schema.
+Respond with JSON: {{"questions": [{{"type":"...","question":"...","options":["..."],"answer":"...","explanation":"...","chunkIdSource":"..."}}]}}
 """
-
         model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(
             prompt,
-            generation_config={
-                "response_mime_type": "application/json",
-                "response_schema": QuizGenerationResponse
-            }
+            generation_config={"response_mime_type": "application/json", "response_schema": QuizGenerationResponse},
         )
-
-        import json
-        result_data = json.loads(response.text)
-        
-        # Fallback fields mapping if required
-        parsed_questions = []
-        for q in result_data.get("questions", []):
-            parsed_questions.append(QuizQuestion(
+        result = json.loads(response.text)
+        questions = [
+            QuizQuestion(
                 type=q.get("type", "MCQ"),
                 question=q.get("question", ""),
                 options=q.get("options"),
                 answer=str(q.get("answer", "")),
                 explanation=q.get("explanation", ""),
-                chunkIdSource=q.get("chunkIdSource", "")
-            ))
-            
-        logger.info(f"Successfully generated {len(parsed_questions)} questions via Gemini.")
-        return QuizGenerationResponse(questions=parsed_questions)
-
+                chunkIdSource=q.get("chunkIdSource", ""),
+            )
+            for q in result.get("questions", [])
+        ]
+        logger.info(f"Generated {len(questions)} questions via Gemini.")
+        quiz_id = _persist_quiz(questions, req, doc_ids)
+        return QuizGenerationResponse(quizId=quiz_id, questions=questions, documentIds=doc_ids)
     except Exception as e:
         logger.error(f"Gemini quiz generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Gemini quiz generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Quiz generation failed: {e}")
 
 
 @router.post("/study/flashcards/generate", response_model=FlashcardGenerationResponse)
 async def generate_flashcards(req: GenerateFlashcardsRequest):
-    logger.info(f"Generating flashcards: mode={req.mode}...")
-    
-    if not req.chunks:
-        return FlashcardGenerationResponse(flashcards=[])
+    logger.info(f"Generating flashcards: mode={req.mode}")
+    doc_ids = _unique_doc_ids(req.chunks)
 
-    # 1. Format source excerpts
+    if not req.chunks:
+        return FlashcardGenerationResponse(deckId="empty", flashcards=[], documentIds=[])
+
     formatted_excerpts = "\n\n".join([
         f"Excerpt from '{c.documentTitle}' (Page {c.pageNumber}) [Chunk ID: {c.chunkId}]:\n{c.text}"
         for c in req.chunks
     ])
 
-    has_gemini = bool(settings.GEMINI_API_KEY and settings.GEMINI_API_KEY != "your_gemini_api_key_here" and settings.GEMINI_API_KEY.strip() != "")
+    # ── Mock path ─────────────────────────────────────────────────────────────
+    if not _HAS_GEMINI:
+        logger.info("Mock flashcard generation (no Gemini key).")
+        flashcards = [
+            FlashcardItem(
+                front=f"Key concept from '{c.documentTitle}' p.{c.pageNumber}",
+                back=c.text[:120] + "...",
+                chunkIdSource=c.chunkId,
+                tags=[req.mode, "mock", c.documentId],
+            )
+            for c in req.chunks
+        ]
+        deck_id = _persist_deck(flashcards, req, doc_ids)
+        return FlashcardGenerationResponse(deckId=deck_id, flashcards=flashcards, documentIds=doc_ids)
 
-    if not has_gemini:
-        # Mock Flashcards logic for testing / fallback mode
-        logger.info("GEMINI_API_KEY is missing. Returning mock flashcards.")
-        mock_cards = []
-        
-        for i, chunk in enumerate(req.chunks):
-            mock_cards.append(FlashcardItem(
-                front=f"Key Concept from '{chunk.documentTitle}' (Page {chunk.pageNumber})",
-                back=chunk.text[:120] + "...",
-                chunkIdSource=chunk.chunkId,
-                tags=[req.mode, "mock"]
-            ))
-            
-        return FlashcardGenerationResponse(flashcards=mock_cards)
-
+    # ── Gemini path ───────────────────────────────────────────────────────────
     try:
         genai.configure(api_key=settings.GEMINI_API_KEY)
+        prompt = f"""You are an academic learning designer. Convert the excerpts into flashcards for active recall.
+Mode: {req.mode}
+  - basic: key terms and definitions
+  - exam: core theories, formulas, laws
+  - revision: summaries and quick reference points
 
-        # 2. Compile prompt for Gemini
-        prompt = f"""You are an academic learning designer. Your task is to convert the provided document excerpts into flashcards designed for active recall and spaced repetition.
-Generate atomic, focused Front/Back question-answer card pairs.
-All cards must be strictly based on the provided source excerpts. Do not use external knowledge.
-Each card must cite its source chunk ID in 'chunkIdSource' and contain tags describing the topic and difficulty.
-
-Flashcard Mode constraints:
-- basic: standard concept definitions and key terms.
-- exam: exam-relevant questions testing core theories, formulas, and laws.
-- revision: quick review items containing summaries and quick reference points.
+Each card: atomic front/back pair, chunkIdSource, and relevant tags.
+Use ONLY the source excerpts. No external knowledge.
 
 Source Excerpts:
 {formatted_excerpts}
 
-You must respond with a JSON object containing a 'flashcards' list matching the requested response schema.
+Respond with JSON: {{"flashcards": [{{"front":"...","back":"...","chunkIdSource":"...","tags":["..."]}}]}}
 """
-
         model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(
             prompt,
-            generation_config={
-                "response_mime_type": "application/json",
-                "response_schema": FlashcardGenerationResponse
-            }
+            generation_config={"response_mime_type": "application/json", "response_schema": FlashcardGenerationResponse},
         )
-
-        import json
-        result_data = json.loads(response.text)
-        
-        parsed_cards = []
-        for fc in result_data.get("flashcards", []):
-            parsed_cards.append(FlashcardItem(
+        result = json.loads(response.text)
+        flashcards = [
+            FlashcardItem(
                 front=fc.get("front", ""),
                 back=fc.get("back", ""),
                 chunkIdSource=fc.get("chunkIdSource", ""),
-                tags=fc.get("tags", [])
-            ))
-
-        logger.info(f"Successfully generated {len(parsed_cards)} flashcards via Gemini.")
-        return FlashcardGenerationResponse(flashcards=parsed_cards)
-
+                tags=fc.get("tags", []),
+            )
+            for fc in result.get("flashcards", [])
+        ]
+        logger.info(f"Generated {len(flashcards)} flashcards via Gemini.")
+        deck_id = _persist_deck(flashcards, req, doc_ids)
+        return FlashcardGenerationResponse(deckId=deck_id, flashcards=flashcards, documentIds=doc_ids)
     except Exception as e:
-        logger.error(f"Gemini flashcards generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Gemini flashcard generation failed: {str(e)}")
+        logger.error(f"Gemini flashcard generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Flashcard generation failed: {e}")

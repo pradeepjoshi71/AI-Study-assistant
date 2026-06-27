@@ -115,13 +115,14 @@ PROVIDED CONTEXT:
   }, []);
 
   const loadData = async (activeToken: string | null) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     setLoading(true);
     try {
       if (activeToken) {
-        const resActions = await fetch("http://localhost:3001/api/autonomous/actions", {
+        const resActions = await fetch(`${apiUrl}/api/autonomous/actions`, {
           headers: { Authorization: `Bearer ${activeToken}` }
         });
-        const resPrompts = await fetch("http://localhost:3001/api/prompt-optimizer/versions", {
+        const resPrompts = await fetch(`${apiUrl}/api/prompt-optimizer/versions`, {
           headers: { Authorization: `Bearer ${activeToken}` }
         });
 
@@ -144,9 +145,10 @@ PROVIDED CONTEXT:
   };
 
   const handleApprove = async (id: string) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     try {
       if (token) {
-        const res = await fetch(`http://localhost:3001/api/autonomous/actions/${id}/approve`, {
+        const res = await fetch(`${apiUrl}/api/autonomous/actions/${id}/approve`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -168,10 +170,11 @@ PROVIDED CONTEXT:
   };
 
   const handleReject = async (id: string) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     const feedback = feedbackInput[id] || "Rejected by administrator";
     try {
       if (token) {
-        const res = await fetch(`http://localhost:3001/api/autonomous/actions/${id}/reject`, {
+        const res = await fetch(`${apiUrl}/api/autonomous/actions/${id}/reject`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -197,9 +200,10 @@ PROVIDED CONTEXT:
   };
 
   const handleRollback = async (mode: string) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     try {
       if (token) {
-        const res = await fetch(`http://localhost:3001/api/prompt-optimizer/rollback/${mode}`, {
+        const res = await fetch(`${apiUrl}/api/prompt-optimizer/rollback/${mode}`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -219,10 +223,11 @@ PROVIDED CONTEXT:
   };
 
   const triggerAutopilotScanner = async () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     setStatusMessage("Triggering autopilot scanner...");
     try {
       if (token) {
-        const res = await fetch("http://localhost:3001/api/autonomous/agent/trigger", {
+        const res = await fetch(`${apiUrl}/api/autonomous/agent/trigger`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -271,8 +276,9 @@ PROVIDED CONTEXT:
     }
 
     try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
       if (token) {
-        const res = await fetch("http://localhost:3001/api/tool-generator/request", {
+        const res = await fetch(`${apiUrl}/api/tool-generator/request`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

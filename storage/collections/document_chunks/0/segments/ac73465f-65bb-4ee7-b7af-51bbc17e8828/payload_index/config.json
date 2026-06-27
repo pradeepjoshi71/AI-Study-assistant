@@ -1,0 +1,1 @@
+{"indexed_fields":{"userId":"keyword","documentId":"keyword","fileType":"keyword","pageNumber":"integer","content":"text"}}

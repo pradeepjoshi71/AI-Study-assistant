@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { PromptOptimizerService } from '../prompt-optimizer/prompt-optimizer.service';
-import { AutonomousActionStatus, AutonomousAction, AutonomousActionType } from '@prisma/client';
+import { AutonomousActionStatus, AutonomousAction } from '@prisma/client';
 
 @Injectable()
 export class AutonomousAgentService {

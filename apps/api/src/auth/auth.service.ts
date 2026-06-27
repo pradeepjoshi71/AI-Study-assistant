@@ -161,9 +161,14 @@ export class AuthService {
       sessionId = session.id;
     }
 
+    const userRecord = await this.usersService.findById(userId);
+    const rawPlan = userRecord?.subscriptionPlan || 'FREE';
+    const planStr = rawPlan.toLowerCase();
+    const tier = planStr === 'pro' ? 'pro' : (planStr === 'team' || planStr === 'enterprise' || planStr === 'premium' ? 'premium' : 'free');
+
     // 2. Sign access & refresh tokens
     const accessToken = this.jwtService.sign(
-      { sub: userId, email },
+      { sub: userId, email, tier },
       { secret: this.accessSecret, expiresIn: "15m" },
     );
 

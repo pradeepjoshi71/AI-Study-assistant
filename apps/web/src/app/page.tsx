@@ -19,9 +19,11 @@ export default function FoundationDashboard() {
   });
 
   const checkHealth = async () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+    const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:8000';
     // Check NestJS API
     try {
-      const res = await fetch("http://localhost:3001/api/v1/health");
+      const res = await fetch(`${apiUrl}/health`);
       if (res.ok) {
         const data = await res.json();
         setApiStatus({ online: true, loading: false, details: data });
@@ -34,7 +36,7 @@ export default function FoundationDashboard() {
 
     // Check FastAPI Service
     try {
-      const res = await fetch("http://localhost:8000/health");
+      const res = await fetch(`${aiUrl}/health`);
       if (res.ok) {
         const data = await res.json();
         setAiStatus({ online: true, loading: false, details: data });
@@ -238,7 +240,7 @@ export default function FoundationDashboard() {
                 border: "1px solid rgba(255,255,255,0.02)",
               }}
             >
-              Host: http://localhost:3001/api/v1
+              Host: {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}
               <br />
               Prisma Schema: Configured
             </div>

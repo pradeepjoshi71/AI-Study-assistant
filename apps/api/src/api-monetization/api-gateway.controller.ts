@@ -82,7 +82,7 @@ export class ApiGatewayController {
     const systemPrompt = `You are a helpful AI Study Assistant. Answer the user query using the following context if relevant:\n\n${context}`;
     
     let assistantResponse = '';
-    let tokensIn = Math.round(systemPrompt.length / 4 + dto.message.length / 4);
+    const tokensIn = Math.round(systemPrompt.length / 4 + dto.message.length / 4);
     let tokensOut = 0;
 
     const startMs = Date.now();
@@ -105,9 +105,13 @@ export class ApiGatewayController {
       const decoder = new TextDecoder();
       let buffer = '';
 
-      while (true) {
+      let isDone = false;
+      while (!isDone) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          isDone = true;
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');

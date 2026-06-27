@@ -2,7 +2,6 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { PlansService } from '../billing/plans.service';
-import { UsageEventType } from '@prisma/client';
 
 @Injectable()
 export class AdminService {

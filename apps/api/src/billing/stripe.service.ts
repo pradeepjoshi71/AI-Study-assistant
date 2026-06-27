@@ -14,7 +14,7 @@ export class StripeService implements OnModuleInit {
     if (!secretKey) {
       this.logger.warn('STRIPE_SECRET_KEY not set — billing features will be unavailable');
     }
-    this.stripe = new Stripe(secretKey, {
+    this.stripe = new Stripe(secretKey || 'sk_test_dummy', {
       apiVersion: '2024-06-20' as any,
       typescript: true,
     });

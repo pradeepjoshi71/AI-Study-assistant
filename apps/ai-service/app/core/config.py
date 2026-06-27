@@ -5,6 +5,9 @@ class Settings(BaseSettings):
     AI_PORT: int = 8000
     AI_HOST: str = "0.0.0.0"
     
+    # Database Connection Settings
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/study_assistant?schema=public"
+
     # Redis Connection Settings
     AI_REDIS_HOST: str = "localhost"
     AI_REDIS_PORT: int = 6379
@@ -18,7 +21,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=("../../.env", ".env"),
         env_file_encoding="utf-8",
         extra="ignore"
     )

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PluginRuntimeService } from '../plugin-runtime/plugin-runtime.service';
-import { PluginInstall, Plugin } from '@prisma/client';
+import { PluginInstall } from '@prisma/client';
 
 @Injectable()
 export class MarketplaceService {

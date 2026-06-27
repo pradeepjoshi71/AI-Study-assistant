@@ -20,7 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; email: string }) {
+  async validate(payload: { sub: string; email: string; tier?: string }) {
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException("User does not exist");
@@ -29,7 +29,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException("User account is deactivated");
     }
 
+    const rawPlan = user.subscriptionPlan || 'FREE';
+    const planStr = rawPlan.toLowerCase();
+    const mappedTier = planStr === 'pro' ? 'pro' : (planStr === 'team' || planStr === 'enterprise' || planStr === 'premium' ? 'premium' : 'free');
+
     // Passport will attach this return value as req.user
-    return user;
+    return {
+      ...user,
+      tier: payload.tier || mappedTier,
+    };
   }
 }

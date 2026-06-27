@@ -37,7 +37,8 @@ export function useChatStream(token: string | null) {
       setError(null);
 
       try {
-        const response = await fetch('http://localhost:3001/api/v1/chat/send', {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+        const response = await fetch(`${apiUrl}/chat/send`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

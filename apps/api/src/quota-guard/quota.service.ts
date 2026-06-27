@@ -122,7 +122,11 @@ export class QuotaService {
     // Try Redis cache first
     const cached = await client.get(cacheKey);
     if (cached) {
-      try { return JSON.parse(cached); } catch {}
+      try {
+        return JSON.parse(cached);
+      } catch {
+        // Cache parsing failed, fallback to DB
+      }
     }
 
     // Fallback to DB

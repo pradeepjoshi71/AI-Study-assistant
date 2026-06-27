@@ -48,7 +48,7 @@ export class InvitationsService {
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    const invitation = await this.prisma.invitation.create({
+    await this.prisma.invitation.create({
       data: {
         organizationId: params.organizationId,
         email: params.email,
@@ -57,11 +57,9 @@ export class InvitationsService {
         invitedById: params.invitedById,
         expiresAt,
       },
-      include: { organization: { select: { name: true } } },
     });
 
     // TODO: Send invitation email via SES/Resend
-    // await this.emailService.sendInvitationEmail({ to: params.email, token, orgName: invitation.organization.name });
 
     return { success: true, token, expiresAt };
   }

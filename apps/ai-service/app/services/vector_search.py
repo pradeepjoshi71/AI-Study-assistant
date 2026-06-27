@@ -2,6 +2,7 @@ import logging
 import random
 from typing import List, Dict, Any, Optional
 from qdrant_client import QdrantClient
+from qdrant_client.http import models
 from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, MatchText
 import google.generativeai as genai
 from app.core.config import settings
@@ -23,13 +24,13 @@ class VectorSearchService:
             self.client = None
 
         # Configure Gemini Embeddings
-        if settings.GEMINI_API_KEY:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.has_gemini = True
+        api_key = settings.GEMINI_API_KEY
+        self.has_gemini = bool(api_key and api_key != "your_gemini_api_key_here" and api_key.strip() != "")
+        if self.has_gemini:
+            genai.configure(api_key=api_key)
             logger.info("Gemini API Key configured for Embeddings.")
         else:
-            self.has_gemini = False
-            logger.warning("GEMINI_API_KEY missing. VectorSearchService running in Mock Vector Mode.")
+            logger.warning("GEMINI_API_KEY missing or placeholder. VectorSearchService running in Mock Vector Mode.")
 
     def _init_collection(self):
         """
@@ -179,12 +180,21 @@ class VectorSearchService:
 
         # 2. Semantic Search (Vector)
         query_vector = self.get_embedding(query, is_query=True)
-        semantic_results = self.client.search(
-            collection_name=self.collection_name,
-            query_vector=query_vector,
-            query_filter=search_filter,
-            limit=limit
-        )
+        try:
+            search_request = models.SearchRequest(
+                vector=query_vector,
+                filter=search_filter,
+                limit=limit,
+                with_payload=True
+            )
+            response = self.client.http.search_api.search_points(
+                collection_name=self.collection_name,
+                search_request=search_request
+            )
+            semantic_results = response.result
+        except Exception as e:
+            logger.error(f"Semantic search failed: {e}")
+            semantic_results = []
 
         # 3. Keyword Search (Text Payload Match)
         keyword_filter = Filter(

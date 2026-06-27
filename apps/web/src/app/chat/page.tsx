@@ -77,8 +77,9 @@ export default function ChatPage() {
   }, [activeConvId, token]);
 
   const fetchInstalledPlugins = async () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     try {
-      const res = await fetch("http://localhost:3001/api/v1/plugins/installed", {
+      const res = await fetch(`${apiUrl}/api/plugins/installed`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -105,8 +106,9 @@ export default function ChatPage() {
   };
 
   const fetchConversations = async () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     try {
-      const res = await fetch("http://localhost:3001/api/v1/chat/list", {
+      const res = await fetch(`${apiUrl}/chat/list`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -119,8 +121,9 @@ export default function ChatPage() {
   };
 
   const fetchDocuments = async () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     try {
-      const res = await fetch("http://localhost:3001/api/v1/documents", {
+      const res = await fetch(`${apiUrl}/documents`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -133,8 +136,9 @@ export default function ChatPage() {
   };
 
   const fetchChatHistory = async (convId: string) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/chat/${convId}`, {
+      const res = await fetch(`${apiUrl}/chat/${convId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -153,13 +157,14 @@ export default function ChatPage() {
   };
 
   const handleAuth = async (e: React.FormEvent) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     e.preventDefault();
     setAuthError("");
     const endpoint = isRegister ? "register" : "login";
     const payload = isRegister ? { email, password, name } : { email, password };
 
     try {
-      const res = await fetch(`http://localhost:3001/api/v1/auth/${endpoint}`, {
+      const res = await fetch(`${apiUrl}/auth/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

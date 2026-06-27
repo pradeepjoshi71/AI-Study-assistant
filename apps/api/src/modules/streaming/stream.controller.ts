@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Res, UseGuards, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';

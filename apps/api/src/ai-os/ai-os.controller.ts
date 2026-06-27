@@ -5,7 +5,6 @@ import {
   Delete,
   Body,
   Param,
-  Query,
   UseGuards,
   Logger,
   BadRequestException,
@@ -230,7 +229,9 @@ export class AiOsController {
       for (const key of keys) {
         queuesBacklog += await redisClient.llen(key);
       }
-    } catch {}
+    } catch (err: any) {
+      this.logger.warn(`Failed to retrieve redis queue backlog: ${err.message}`);
+    }
 
     return {
       status: 'healthy',

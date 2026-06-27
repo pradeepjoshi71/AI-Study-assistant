@@ -16,10 +16,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("embedding_worker")
 
 # PostgreSQL Database setup
-db_url = os.getenv(
-    "DATABASE_URL",
-    f"postgresql://postgres:postgres_secure_pass@localhost:5432/study_assistant?schema=public"
-)
+db_url = settings.DATABASE_URL
 if db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
@@ -125,7 +122,6 @@ async def run_embedding_worker():
                     "concurrency": 1
                 }
             )
-            await worker.start()
             logger.info("BullMQ Worker listening to 'embedding-generation' queue.")
             while True:
                 await asyncio.sleep(1)

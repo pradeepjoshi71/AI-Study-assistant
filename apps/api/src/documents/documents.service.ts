@@ -10,6 +10,7 @@ import { S3Service } from "../storage/s3.service";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 import { Document, DocumentStatus } from "@prisma/client";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 
 @Injectable()
 export class DocumentsService {
@@ -19,6 +20,7 @@ export class DocumentsService {
     private prisma: PrismaService,
     private s3Service: S3Service,
     @InjectQueue("document-processing") private documentQueue: Queue,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async upload(
@@ -74,6 +76,12 @@ export class DocumentsService {
       );
       // Don't fail the upload request, the worker can poll or database admin can retry
     }
+
+    // 4. Emit event for event-driven invalidation of RAG cache
+    this.eventEmitter.emit("document.uploaded", {
+      userId,
+      documentId: document.id,
+    });
 
     return document;
   }

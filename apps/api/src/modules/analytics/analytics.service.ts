@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LogSessionDto, LogQuizAttemptDto, LogFlashcardReviewDto, RecallStatus } from './analytics.types';
 
@@ -277,7 +277,7 @@ export class AnalyticsService {
       return 0;
     }
 
-    let checkDate = latestDate;
+    const checkDate = latestDate;
     for (let i = 0; i < uniqueDates.length; i++) {
       const d = uniqueDates[i];
       d.setHours(0, 0, 0, 0);

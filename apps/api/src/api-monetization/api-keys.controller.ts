@@ -5,7 +5,6 @@ import { ApiKeysService } from './api-keys.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { IsString, IsArray, IsOptional, IsDateString, IsNumber } from 'class-validator';
-import { Type } from 'class-transformer';
 
 class CreateApiKeyDto {
   @IsString() name!: string;

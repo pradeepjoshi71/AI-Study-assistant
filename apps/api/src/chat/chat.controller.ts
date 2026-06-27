@@ -1,9 +1,9 @@
-import { Controller, Post, Get, Body, Res, Param, UseGuards, Req, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, Res, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ChatService, SendChatDto } from './chat.service';
 import { ConversationService } from '../conversation/conversation.service';
-import { Response, Request } from 'express';
+import { Response } from 'express';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 import { RateLimit } from '../common/decorators/rate-limit.decorator';
 

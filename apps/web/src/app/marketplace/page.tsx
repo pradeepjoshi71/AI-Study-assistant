@@ -130,14 +130,15 @@ export default function MarketplacePage() {
   }, []);
 
   const loadData = async (activeToken: string | null) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     setLoading(true);
     try {
       if (activeToken) {
         // Fetch from actual NestJS API endpoints
-        const resStore = await fetch("http://localhost:3001/api/marketplace/plugins", {
+        const resStore = await fetch(`${apiUrl}/api/marketplace/plugins`, {
           headers: { Authorization: `Bearer ${activeToken}` }
         });
-        const resInst = await fetch("http://localhost:3001/api/plugins/installed", {
+        const resInst = await fetch(`${apiUrl}/api/plugins/installed`, {
           headers: { Authorization: `Bearer ${activeToken}` }
         });
         
@@ -170,9 +171,10 @@ export default function MarketplacePage() {
   };
 
   const handleInstall = async (pluginId: string) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     try {
       if (token) {
-        const res = await fetch("http://localhost:3001/api/plugins/install", {
+        const res = await fetch(`${apiUrl}/api/plugins/install`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -199,9 +201,10 @@ export default function MarketplacePage() {
   };
 
   const handleUninstall = async (pluginId: string) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     try {
       if (token) {
-        const res = await fetch(`http://localhost:3001/api/plugins/install/${pluginId}`, {
+        const res = await fetch(`${apiUrl}/api/plugins/install/${pluginId}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -221,10 +224,11 @@ export default function MarketplacePage() {
   };
 
   const handleSaveConfig = async (pluginId: string) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     const key = pluginConfigs[pluginId] || "";
     try {
       if (token) {
-        const res = await fetch("http://localhost:3001/api/plugins/install", {
+        const res = await fetch(`${apiUrl}/api/plugins/install`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -247,6 +251,7 @@ export default function MarketplacePage() {
   };
 
   const handlePublish = async (e: React.FormEvent) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
     e.preventDefault();
     const payload = {
       key: devKey,
@@ -265,7 +270,7 @@ export default function MarketplacePage() {
 
     try {
       if (token) {
-        const res = await fetch("http://localhost:3001/api/marketplace/plugins", {
+        const res = await fetch(`${apiUrl}/api/marketplace/plugins`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

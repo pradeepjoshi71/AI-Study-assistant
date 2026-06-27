@@ -5,8 +5,6 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { CommonModule } from '../common/common.module';
 import { KnowledgeGraphModule } from '../modules/knowledge-graph/knowledge-graph.module';
 import { MemoryModule } from '../modules/memory/memory.module';
-import { DocumentProcessingProcessor } from './document-processing.processor';
-import { EmbeddingGenerationProcessor } from './embedding-generation.processor';
 import { GraphBuildingProcessor } from './graph-building.processor';
 import { AnalyticsAggregationProcessor } from './analytics-aggregation.processor';
 import { MemorySummarizationProcessor } from './memory-summarization.processor';
@@ -35,6 +33,7 @@ const QUEUE_NAMES = [
           host: configService.get<string>('REDIS_HOST', 'localhost'),
           port: Number(configService.get<number>('REDIS_PORT', 6379)),
           password: configService.get<string>('REDIS_PASSWORD', '') || undefined,
+          skipVersionCheck: true,
         },
         defaultJobOptions: {
           attempts: 3,
@@ -48,8 +47,6 @@ const QUEUE_NAMES = [
     ...QUEUE_NAMES.map((name) => BullModule.registerQueue({ name })),
   ],
   providers: [
-    DocumentProcessingProcessor,
-    EmbeddingGenerationProcessor,
     GraphBuildingProcessor,
     AnalyticsAggregationProcessor,
     MemorySummarizationProcessor,

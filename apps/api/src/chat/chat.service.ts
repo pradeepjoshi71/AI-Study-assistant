@@ -7,7 +7,7 @@ import { ContextBuilderService } from '../context-builder/context-builder.servic
 import { ConfigService } from '@nestjs/config';
 import { MessageRole } from '@prisma/client';
 import { Response } from 'express';
-import { CacheService, CACHE_TTL } from '../common/services/cache.service';
+import { CacheService } from '../common/services/cache.service';
 import { MetricsService } from '../common/services/metrics.service';
 import { MarketplaceService } from '../marketplace/marketplace.service';
 
@@ -49,8 +49,8 @@ export class ChatService {
 
     // ─── RAG Query Cache Check ──────────────────────────────────────────
     // Only cache on non-new conversations (we need a conversationId for SSE)
-    if (conversationId && tenantId) {
-      const cacheKey = CacheService.ragQueryKey(tenantId, dto.message, dto.documentIds);
+    if (conversationId) {
+      const cacheKey = CacheService.ragQueryKey(userId, dto.message);
       const cached = await this.cacheService.get<string>(cacheKey);
 
       if (cached) {
@@ -65,7 +65,7 @@ export class ChatService {
 
         // Record cache-hit metric (fire-and-forget)
         this.metricsService.recordUsage({
-          userId, tenantId,
+          userId, tenantId: tenantId ?? 'unknown',
           endpoint: 'chat.send',
           cacheHit: true,
           latencyMs: Date.now() - startMs,
@@ -133,9 +133,9 @@ export class ChatService {
     // 8. Stream LLM Response supporting tool calling loops
     let loopCount = 0;
     const maxLoops = 5;
-    let activeMessage = dto.message;
-    let activeHistory = [...contextPackage.history];
-    let activeCitations = [...enrichedCitations];
+    const activeMessage = dto.message;
+    const activeHistory = [...contextPackage.history];
+    const activeCitations = [...enrichedCitations];
     let finalFullText = '';
     let finalTokenCount = 0;
 
@@ -205,9 +205,9 @@ export class ChatService {
     }
 
     // 9. Write response to RAG cache (async, non-blocking)
-    if (finalFullText && conversationId && tenantId) {
-      const cacheKey = CacheService.ragQueryKey(tenantId, dto.message, dto.documentIds);
-      this.cacheService.set(cacheKey, finalFullText, CACHE_TTL.RAG_QUERY).catch(() => {});
+    if (finalFullText && conversationId) {
+      const cacheKey = CacheService.ragQueryKey(userId, dto.message);
+      this.cacheService.setRagResponse(userId, cacheKey, finalFullText).catch(() => {});
     }
 
     // 10. Record usage metrics (fire-and-forget)
@@ -238,7 +238,7 @@ export class ChatService {
     // Identify last message
     const lastMsg = messages[messages.length - 1];
     let promptMessageText = '';
-    let precedingMessages = [...messages];
+    const precedingMessages = [...messages];
 
     if (lastMsg.role === MessageRole.ASSISTANT) {
       // Delete last assistant message
@@ -294,9 +294,9 @@ export class ChatService {
     // 7. Stream and Save supporting tool execution
     let loopCount = 0;
     const maxLoops = 5;
-    let activeMessage = promptMessageText;
-    let activeHistory = [...historyExcludingLastUser];
-    let activeCitations = [...enrichedCitations];
+    const activeMessage = promptMessageText;
+    const activeHistory = [...historyExcludingLastUser];
+    const activeCitations = [...enrichedCitations];
 
     while (loopCount < maxLoops) {
       loopCount++;
@@ -397,9 +397,13 @@ export class ChatService {
       let interceptedToolCall: { name: string; args: any } | null = null;
       let currentEvent = 'message';
 
-      while (true) {
+      let isDone = false;
+      while (!isDone) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          isDone = true;
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');

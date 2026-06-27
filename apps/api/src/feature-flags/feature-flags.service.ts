@@ -191,7 +191,9 @@ export class FeatureFlagsService implements OnModuleInit {
           },
         },
       });
-    } catch {}
+    } catch {
+      // Override might not exist, ignore deletion errors
+    }
 
     const cacheKey = `feature_flag:${organizationId}:${key}`;
     await this.redis.getClient().del(cacheKey);

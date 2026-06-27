@@ -1,10 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { User, Prisma } from "@prisma/client";
+import { CacheService, CACHE_TTL } from "../common/services/cache.service";
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cacheService: CacheService,
+  ) {}
 
   async create(data: Prisma.UserCreateInput): Promise<User> {
     return this.prisma.user.create({
@@ -19,15 +23,26 @@ export class UsersService {
   }
 
   async findById(id: string): Promise<User | null> {
-    return this.prisma.user.findUnique({
-      where: { id },
-    });
+    const cacheKey = CacheService.userSessionKey(id);
+    const result = await this.cacheService.getOrSet<User | null>(
+      cacheKey,
+      CACHE_TTL.USER_SESSION,
+      async () => {
+        return this.prisma.user.findUnique({
+          where: { id },
+        });
+      },
+    );
+    return result.value;
   }
 
   async update(id: string, data: Prisma.UserUpdateInput): Promise<User> {
-    return this.prisma.user.update({
+    const user = await this.prisma.user.update({
       where: { id },
       data,
     });
+    const cacheKey = CacheService.userSessionKey(id);
+    await this.cacheService.del(cacheKey).catch(() => {});
+    return user;
   }
 }
