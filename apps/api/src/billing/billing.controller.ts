@@ -10,9 +10,8 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
-  RawBodyRequest,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { BillingService } from './billing.service';
 import { PlansService } from './plans.service';
 import { WebhookHandler } from './webhook.handler';
@@ -68,8 +67,8 @@ export class BillingController {
     @CurrentUser() user: any,
     @Body() body: { planType: PlanType; cycle: BillingCycle; successUrl: string; cancelUrl: string },
   ) {
-    return this.billing.createCheckoutSession(
-      user.organizationId,
+    return this.billing.createUserCheckoutSession(
+      user.id,
       body.planType,
       body.cycle,
       body.successUrl,
@@ -80,7 +79,13 @@ export class BillingController {
   @Post('portal')
   @UseGuards(JwtAuthGuard)
   async createPortal(@CurrentUser() user: any, @Body('returnUrl') returnUrl: string) {
-    return this.billing.createBillingPortalSession(user.organizationId, returnUrl);
+    return this.billing.createUserBillingPortalSession(user.id, returnUrl);
+  }
+
+  @Get('summary')
+  @UseGuards(JwtAuthGuard)
+  async getSummary(@CurrentUser() user: any) {
+    return this.billing.getBillingSummary(user.id, user.orgId);
   }
 
   @Get('invoices')
@@ -91,10 +96,10 @@ export class BillingController {
 
   // ─── Stripe Webhook (raw body required!) ─────────────────
 
-  @Post('webhook/stripe')
+  @Post('webhook')
   @HttpCode(HttpStatus.OK)
   async handleStripeWebhook(
-    @Req() req: RawBodyRequest<Request>,
+    @Req() req: any,
     @Headers('stripe-signature') signature: string,
     @Res() res: Response,
   ) {
@@ -105,7 +110,10 @@ export class BillingController {
 
     let event;
     try {
-      event = this.stripe.constructWebhookEvent(req.rawBody!, signature);
+      const rawBody = Buffer.isBuffer(req.body)
+        ? req.body
+        : (req.rawBody ? req.rawBody : Buffer.from(req.body));
+      event = this.stripe.constructWebhookEvent(rawBody, signature);
     } catch (err: any) {
       res.status(400).json({ error: `Webhook signature verification failed: ${err.message}` });
       return;

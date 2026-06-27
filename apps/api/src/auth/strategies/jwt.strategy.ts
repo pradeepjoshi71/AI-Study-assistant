@@ -20,7 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; email: string; tier?: string }) {
+  async validate(payload: { sub: string; email: string; tier?: string; orgId?: string }) {
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException("User does not exist");
@@ -37,6 +37,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       ...user,
       tier: payload.tier || mappedTier,
+      orgId: payload.orgId,
     };
   }
 }

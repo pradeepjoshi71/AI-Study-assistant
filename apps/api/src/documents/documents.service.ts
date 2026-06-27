@@ -11,6 +11,7 @@ import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 import { Document, DocumentStatus } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { userContextStorage } from "../common/context/user-context";
 
 @Injectable()
 export class DocumentsService {
@@ -61,6 +62,7 @@ export class DocumentsService {
         storageKey: s3Result.key,
         status: DocumentStatus.UPLOADED,
         pageCount: 0, // Placeholder, updated in worker step if PDF
+        orgId: userContextStorage.getStore()?.orgId || null,
       },
     });
 
@@ -87,8 +89,9 @@ export class DocumentsService {
   }
 
   async findAll(userId: string): Promise<Document[]> {
+    const orgId = userContextStorage.getStore()?.orgId;
     return this.prisma.document.findMany({
-      where: { userId },
+      where: orgId ? { orgId } : { userId },
       orderBy: { createdAt: "desc" },
     });
   }
@@ -102,7 +105,12 @@ export class DocumentsService {
       throw new NotFoundException("Document not found");
     }
 
-    if (document.userId !== userId) {
+    const orgId = userContextStorage.getStore()?.orgId;
+    if (orgId) {
+      if (document.orgId !== orgId) {
+        throw new ForbiddenException("You do not have access to this document");
+      }
+    } else if (document.userId !== userId) {
       throw new ForbiddenException("You do not have access to this document");
     }
 

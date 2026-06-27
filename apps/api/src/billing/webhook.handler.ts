@@ -1,11 +1,11 @@
-import {
-  Injectable,
-  Logger,
-} from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { StripeService } from './stripe.service';
-import Stripe from 'stripe';
-import { SubscriptionStatus, InvoiceStatus } from '@prisma/client';
+import { Injectable, Logger } from "@nestjs/common";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
+import { PrismaService } from "../prisma/prisma.service";
+import { StripeService } from "./stripe.service";
+import { CacheService } from "../common/services/cache.service";
+import Stripe from "stripe";
+import { SubscriptionStatus, InvoiceStatus, PlanType } from "@prisma/client";
 
 /**
  * Stripe webhook event processor.
@@ -20,6 +20,8 @@ export class WebhookHandler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stripe: StripeService,
+    private readonly cache: CacheService,
+    @InjectQueue("billing-notifications") private readonly billingQueue: Queue
   ) {}
 
   async handle(event: Stripe.Event): Promise<void> {
@@ -40,25 +42,24 @@ export class WebhookHandler {
     // ── Route to appropriate handler ────────────────────────
     try {
       switch (event.type) {
-        case 'customer.subscription.created':
-        case 'customer.subscription.updated':
+        case "checkout.session.completed":
+          await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+          break;
+
+        case "customer.subscription.updated":
           await this.handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
           break;
 
-        case 'customer.subscription.deleted':
+        case "customer.subscription.deleted":
           await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
           break;
 
-        case 'invoice.payment_succeeded':
+        case "invoice.payment_succeeded":
           await this.handleInvoicePaid(event.data.object as Stripe.Invoice);
           break;
 
-        case 'invoice.payment_failed':
+        case "invoice.payment_failed":
           await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
-          break;
-
-        case 'customer.subscription.trial_will_end':
-          await this.handleTrialWillEnd(event.data.object as Stripe.Subscription);
           break;
 
         default:
@@ -70,12 +71,99 @@ export class WebhookHandler {
     }
   }
 
-  private async handleSubscriptionUpdated(sub: Stripe.Subscription) {
-    const organizationId = sub.metadata?.organizationId;
-    if (!organizationId) {
-      this.logger.warn(`Subscription ${sub.id} has no organizationId metadata`);
+  private async handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+    const userId = session.metadata?.userId;
+    if (!userId) {
+      this.logger.warn(`Checkout session ${session.id} completed with no userId metadata`);
       return;
     }
+
+    const planType = session.metadata?.planType as PlanType;
+    const plan = await this.prisma.plan.findUnique({
+      where: { type: planType || PlanType.FREE }
+    });
+
+    if (!plan) {
+      this.logger.error(`Plan not found for type: ${planType}`);
+      return;
+    }
+
+    // Update user with subscription ID
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { stripeSubscriptionId: session.subscription as string }
+    });
+
+    // Resolve subscription end date
+    let currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    if (session.subscription) {
+      try {
+        const stripeSub = await this.stripe.client.subscriptions.retrieve(session.subscription as string);
+        currentPeriodEnd = new Date((stripeSub as any).current_period_end * 1000);
+      } catch (err: any) {
+        this.logger.warn(`Failed to fetch subscription period end from Stripe: ${err.message}`);
+      }
+    }
+
+    const existingSub = await this.prisma.subscription.findFirst({
+      where: { userId }
+    });
+
+    if (existingSub) {
+      await this.prisma.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          planId: plan.id,
+          status: SubscriptionStatus.ACTIVE,
+          stripeSubscriptionId: session.subscription as string,
+          currentPeriodEnd,
+        }
+      });
+    } else {
+      await this.prisma.subscription.create({
+        data: {
+          userId,
+          organizationId: session.metadata?.organizationId || "",
+          planId: plan.id,
+          status: SubscriptionStatus.ACTIVE,
+          stripeSubscriptionId: session.subscription as string,
+          currentPeriodEnd,
+        }
+      });
+    }
+
+    await this.invalidateUserCache(userId);
+    await this.dispatchBullJob(userId, "checkout.session.completed", session);
+  }
+
+  private async handleSubscriptionUpdated(sub: Stripe.Subscription) {
+    let userId: string | undefined = sub.metadata?.userId;
+    if (!userId) {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            { stripeSubscriptionId: sub.id },
+            { stripeCustomerId: sub.customer as string }
+          ]
+        }
+      });
+      userId = user?.id;
+    }
+    if (!userId) {
+      this.logger.warn(`Subscription updated event: could not resolve userId for subscription ${sub.id}`);
+      return;
+    }
+
+    const priceId = sub.items.data[0]?.price.id;
+    const plan = await this.prisma.plan.findFirst({
+      where: {
+        OR: [
+          { stripePriceId: priceId },
+          { stripePriceIdMonthly: priceId },
+          { stripePriceIdYearly: priceId }
+        ]
+      }
+    });
 
     const statusMap: Record<string, SubscriptionStatus> = {
       active: SubscriptionStatus.ACTIVE,
@@ -84,45 +172,122 @@ export class WebhookHandler {
       canceled: SubscriptionStatus.CANCELED,
       paused: SubscriptionStatus.PAUSED,
       incomplete: SubscriptionStatus.INCOMPLETE,
+      unpaid: SubscriptionStatus.PAST_DUE,
     };
 
-    await this.prisma.subscription.updateMany({
-      where: { organizationId },
-      data: {
-        status: statusMap[sub.status] ?? SubscriptionStatus.ACTIVE,
-        stripeSubscriptionId: sub.id,
-        stripeItemId: sub.items.data[0]?.id,
-        currentPeriodStart: new Date((sub as any).current_period_start * 1000),
-        currentPeriodEnd: new Date((sub as any).current_period_end * 1000),
-        cancelAtPeriodEnd: sub.cancel_at_period_end,
-        trialEndAt: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
-      },
+    const status = statusMap[sub.status] ?? SubscriptionStatus.ACTIVE;
+    const currentPeriodEnd = new Date((sub as any).current_period_end * 1000);
+    const trialEndAt = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
+    const planId = plan?.id || (await this.getDefaultFreePlanId());
+
+    const existingSub = await this.prisma.subscription.findFirst({
+      where: { userId }
     });
-    this.logger.log(`Subscription updated for org ${organizationId}: ${sub.status}`);
+
+    if (existingSub) {
+      await this.prisma.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          planId,
+          status,
+          stripeSubscriptionId: sub.id,
+          currentPeriodEnd,
+          trialEndAt,
+        }
+      });
+    } else {
+      await this.prisma.subscription.create({
+        data: {
+          userId,
+          organizationId: sub.metadata?.organizationId || "",
+          planId,
+          status,
+          stripeSubscriptionId: sub.id,
+          currentPeriodEnd,
+          trialEndAt,
+        }
+      });
+    }
+
+    await this.invalidateUserCache(userId);
+    await this.dispatchBullJob(userId, "customer.subscription.updated", sub);
   }
 
   private async handleSubscriptionDeleted(sub: Stripe.Subscription) {
-    const organizationId = sub.metadata?.organizationId;
-    if (!organizationId) return;
+    let userId: string | undefined = sub.metadata?.userId;
+    if (!userId) {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            { stripeSubscriptionId: sub.id },
+            { stripeCustomerId: sub.customer as string }
+          ]
+        }
+      });
+      userId = user?.id;
+    }
+    if (!userId) return;
 
-    await this.prisma.subscription.updateMany({
-      where: { organizationId },
-      data: { status: SubscriptionStatus.CANCELED, canceledAt: new Date() },
+    const freePlan = await this.prisma.plan.findUnique({
+      where: { type: PlanType.FREE }
     });
-    this.logger.log(`Subscription canceled for org ${organizationId}`);
+    const planId = freePlan?.id || "";
+
+    const existingSub = await this.prisma.subscription.findFirst({
+      where: { userId }
+    });
+
+    if (existingSub) {
+      await this.prisma.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          planId,
+          status: SubscriptionStatus.CANCELED,
+          canceledAt: new Date(),
+        }
+      });
+    } else {
+      await this.prisma.subscription.create({
+        data: {
+          userId,
+          organizationId: sub.metadata?.organizationId || "",
+          planId,
+          status: SubscriptionStatus.CANCELED,
+          currentPeriodEnd: new Date(),
+        }
+      });
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { stripeSubscriptionId: null }
+    });
+
+    await this.invalidateUserCache(userId);
+    await this.dispatchBullJob(userId, "customer.subscription.deleted", sub);
   }
 
   private async handleInvoicePaid(invoice: Stripe.Invoice) {
-    const customerId = invoice.customer as string;
-    const org = await this.prisma.organization.findFirst({
-      where: { stripeCustomerId: customerId },
-    });
-    if (!org) return;
+    let userId: string | undefined = invoice.metadata?.userId;
+    const stripeSubscriptionId = (invoice as any).subscription as string;
+    if (!userId) {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            { stripeSubscriptionId },
+            { stripeCustomerId: invoice.customer as string }
+          ]
+        }
+      });
+      userId = user?.id;
+    }
+    if (!userId) return;
 
     await this.prisma.invoice.upsert({
       where: { stripeInvoiceId: invoice.id },
       create: {
-        organizationId: org.id,
+        userId,
+        organizationId: invoice.metadata?.organizationId || "",
         stripeInvoiceId: invoice.id,
         status: InvoiceStatus.PAID,
         amountDueUsdCents: invoice.amount_due,
@@ -138,54 +303,83 @@ export class WebhookHandler {
         status: InvoiceStatus.PAID,
         amountPaidUsdCents: invoice.amount_paid,
         paidAt: new Date(),
-      },
+      }
     });
 
-    // Reset period usage counters on successful payment
     await this.prisma.subscription.updateMany({
-      where: { organizationId: org.id },
+      where: { userId },
       data: {
         status: SubscriptionStatus.ACTIVE,
         currentPeriodChatsUsed: 0,
         currentPeriodTokensUsed: 0,
         currentPeriodApiCallsUsed: 0,
-      },
+      }
     });
 
-    this.logger.log(`Invoice paid for org ${org.id}: $${invoice.amount_paid / 100}`);
+    await this.invalidateUserCache(userId);
+    await this.dispatchBullJob(userId, "invoice.paid", invoice);
   }
 
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
-    const customerId = invoice.customer as string;
-    const org = await this.prisma.organization.findFirst({
-      where: { stripeCustomerId: customerId },
-    });
-    if (!org) return;
+    let userId: string | undefined = invoice.metadata?.userId;
+    const stripeSubscriptionId = (invoice as any).subscription as string;
+    if (!userId) {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            { stripeSubscriptionId },
+            { stripeCustomerId: invoice.customer as string }
+          ]
+        }
+      });
+      userId = user?.id;
+    }
+    if (!userId) return;
 
     await this.prisma.invoice.upsert({
       where: { stripeInvoiceId: invoice.id },
       create: {
-        organizationId: org.id,
+        userId,
+        organizationId: invoice.metadata?.organizationId || "",
         stripeInvoiceId: invoice.id,
         status: InvoiceStatus.OPEN,
         amountDueUsdCents: invoice.amount_due,
         amountPaidUsdCents: 0,
         currency: invoice.currency,
       },
-      update: { status: InvoiceStatus.OPEN },
+      update: { status: InvoiceStatus.OPEN }
     });
 
     await this.prisma.subscription.updateMany({
-      where: { organizationId: org.id },
-      data: { status: SubscriptionStatus.PAST_DUE },
+      where: { userId },
+      data: { status: SubscriptionStatus.PAST_DUE }
     });
 
-    this.logger.warn(`Invoice payment FAILED for org ${org.id}`);
+    await this.invalidateUserCache(userId);
+    await this.dispatchBullJob(userId, "invoice.payment_failed", invoice);
   }
 
-  private async handleTrialWillEnd(sub: Stripe.Subscription) {
-    const organizationId = sub.metadata?.organizationId;
-    this.logger.log(`Trial ending soon for org ${organizationId}`);
-    // TODO: trigger email notification via EventEmitter
+  private async getDefaultFreePlanId(): Promise<string> {
+    const free = await this.prisma.plan.findUnique({ where: { type: PlanType.FREE } });
+    return free?.id || "";
+  }
+
+  private async invalidateUserCache(userId: string): Promise<void> {
+    await this.cache.del(CacheService.userPlanKey(userId)).catch(() => {});
+    await this.cache.del(CacheService.userSessionKey(userId)).catch(() => {});
+    this.logger.log(`Invalidated plan and session caches for user: ${userId}`);
+  }
+
+  private async dispatchBullJob(userId: string, eventType: string, payload: any): Promise<void> {
+    try {
+      await this.billingQueue.add("side-effects", {
+        userId,
+        eventType,
+        payload,
+      });
+      this.logger.log(`Dispatched BullMQ job for event type "${eventType}" and user ${userId}`);
+    } catch (err: any) {
+      this.logger.error(`Failed to dispatch BullMQ job: ${err.message}`);
+    }
   }
 }

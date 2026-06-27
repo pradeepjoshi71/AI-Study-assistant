@@ -31,10 +31,10 @@ export class RbacAbacGuard implements CanActivate {
 
     // 2. Org-level RBAC role enforcement (VIEWER cannot write)
     const orgMembership = userId
-      ? await this.prisma.organizationMember.findUnique({
+      ? await this.prisma.orgMember.findUnique({
           where: {
-            organizationId_userId: {
-              organizationId,
+            orgId_userId: {
+              orgId: organizationId,
               userId,
             },
           },
@@ -60,7 +60,7 @@ export class RbacAbacGuard implements CanActivate {
       });
 
       if (doc) {
-        const docOrgId = doc.user.organizationMemberships[0]?.organizationId;
+        const docOrgId = doc.user.organizationMemberships[0]?.orgId;
         if (docOrgId !== organizationId) {
           throw new ForbiddenException('Tenant Isolation Violation: Access to resource denied.');
         }

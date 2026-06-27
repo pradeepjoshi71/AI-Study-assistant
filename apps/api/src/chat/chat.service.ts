@@ -149,6 +149,7 @@ export class ChatService {
         conversationId,
         activeCitations,
         res,
+        userId,
         geminiTools,
       );
 
@@ -308,6 +309,7 @@ export class ChatService {
         conversationId,
         activeCitations,
         res,
+        userId,
         geminiTools,
       );
 
@@ -367,6 +369,7 @@ export class ChatService {
     conversationId: string,
     citations: Citation[],
     res: Response,
+    userId: string,
     tools?: any[],
   ): Promise<{ fullText: string; tokenCount: number; toolCall: { name: string; args: any } | null }> {
     try {
@@ -374,6 +377,7 @@ export class ChatService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-user-id': userId,
         },
         body: JSON.stringify({
           systemPrompt,

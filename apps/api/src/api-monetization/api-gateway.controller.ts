@@ -89,7 +89,10 @@ export class ApiGatewayController {
     try {
       const response = await fetch(`${this.aiServiceUrl}/ai/chat/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId,
+        },
         body: JSON.stringify({
           systemPrompt,
           message: dto.message,

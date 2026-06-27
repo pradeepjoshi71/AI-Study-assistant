@@ -13,8 +13,8 @@ export class TeamsService {
   // ─── Membership ───────────────────────────────────────────
 
   async getMembers(organizationId: string) {
-    return this.prisma.organizationMember.findMany({
-      where: { organizationId },
+    return this.prisma.orgMember.findMany({
+      where: { orgId: organizationId },
       include: { user: { select: { id: true, email: true, name: true, avatar: true } } },
       orderBy: { joinedAt: 'asc' },
     });
@@ -36,8 +36,8 @@ export class TeamsService {
     if (newRole !== 'OWNER') {
       const targetMembership = await this.getMembership(organizationId, targetUserId);
       if (targetMembership?.role === 'OWNER') {
-        const ownerCount = await this.prisma.organizationMember.count({
-          where: { organizationId, role: 'OWNER' },
+        const ownerCount = await this.prisma.orgMember.count({
+          where: { orgId: organizationId, role: 'OWNER' },
         });
         if (ownerCount <= 1) {
           throw new ForbiddenException('Cannot demote the only OWNER');
@@ -45,9 +45,9 @@ export class TeamsService {
       }
     }
 
-    return this.prisma.organizationMember.update({
+    return this.prisma.orgMember.update({
       where: {
-        organizationId_userId: { organizationId, userId: targetUserId },
+        orgId_userId: { orgId: organizationId, userId: targetUserId },
       },
       data: { role: newRole },
     });
@@ -69,8 +69,8 @@ export class TeamsService {
       throw new ForbiddenException('Cannot remove the OWNER — transfer ownership first');
     }
 
-    await this.prisma.organizationMember.delete({
-      where: { organizationId_userId: { organizationId, userId: targetUserId } },
+    await this.prisma.orgMember.delete({
+      where: { orgId_userId: { orgId: organizationId, userId: targetUserId } },
     });
 
     return { success: true };
@@ -82,15 +82,15 @@ export class TeamsService {
     if (membership.role === 'OWNER') {
       throw new ForbiddenException('Transfer ownership before leaving');
     }
-    await this.prisma.organizationMember.delete({
-      where: { organizationId_userId: { organizationId, userId } },
+    await this.prisma.orgMember.delete({
+      where: { orgId_userId: { orgId: organizationId, userId } },
     });
     return { success: true };
   }
 
   async getMembership(organizationId: string, userId: string) {
-    return this.prisma.organizationMember.findUnique({
-      where: { organizationId_userId: { organizationId, userId } },
+    return this.prisma.orgMember.findUnique({
+      where: { orgId_userId: { orgId: organizationId, userId } },
     });
   }
 

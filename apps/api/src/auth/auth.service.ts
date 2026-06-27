@@ -144,6 +144,7 @@ export class AuthService {
     userId: string,
     email: string,
     existingSessionId?: string,
+    targetOrgId?: string,
   ) {
     // 1. Create or retrieve session ID
     let sessionId = existingSessionId;
@@ -166,9 +167,19 @@ export class AuthService {
     const planStr = rawPlan.toLowerCase();
     const tier = planStr === 'pro' ? 'pro' : (planStr === 'team' || planStr === 'enterprise' || planStr === 'premium' ? 'premium' : 'free');
 
+    // Resolve orgId (either requested targetOrgId or the user's default/first organization)
+    let orgId = targetOrgId;
+    if (!orgId) {
+      const membership = await this.prisma.orgMember.findFirst({
+        where: { userId },
+        orderBy: { joinedAt: "asc" },
+      });
+      orgId = membership?.orgId || undefined;
+    }
+
     // 2. Sign access & refresh tokens
     const accessToken = this.jwtService.sign(
-      { sub: userId, email, tier },
+      { sub: userId, email, tier, orgId },
       { secret: this.accessSecret, expiresIn: "15m" },
     );
 
@@ -283,9 +294,9 @@ export class AuthService {
               currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             },
           });
-          await tx.organizationMember.create({
+          await tx.orgMember.create({
             data: {
-              organizationId: org.id,
+              orgId: org.id,
               userId: user!.id,
               role: 'OWNER',
             },

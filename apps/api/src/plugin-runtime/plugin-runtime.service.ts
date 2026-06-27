@@ -53,7 +53,7 @@ export class PluginRuntimeService {
           where: {
             user: {
               organizationMemberships: {
-                some: { organizationId },
+                some: { orgId: organizationId },
               },
             },
           },

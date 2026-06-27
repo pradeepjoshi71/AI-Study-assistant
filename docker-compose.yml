@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database Primary
   postgres:
     image: postgres:16-alpine
     container_name: study_assistant_postgres
@@ -14,17 +14,41 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh
+    command: ["postgres", "-c", "wal_level=replica", "-c", "max_wal_senders=10", "-c", "archive_mode=on", "-c", "archive_command=cd .", "-c", "hot_standby=on"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-study_assistant}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Redis Cache & Broker
+  # PostgreSQL Database Replica
+  postgres-replica:
+    image: postgres:16-alpine
+    container_name: study_assistant_postgres_replica
+    restart: always
+    environment:
+      PGUSER: repl_user
+      PGPASSWORD: repl_password
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-replica.sh:/init-replica.sh
+    entrypoint: ["/bin/sh", "/init-replica.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U repl_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Broker with production constraints (512MB RAM + LRU eviction)
   redis:
     image: redis:7-alpine
     container_name: study_assistant_redis
     restart: always
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
     volumes:
@@ -35,7 +59,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # NestJS Backend API
+  # NestJS Backend API (runs in PM2 cluster mode)
   api:
     build:
       context: .
@@ -85,8 +109,14 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --spider http://localhost:3000 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
-  # FastAPI AI Service
+  # FastAPI AI Web Service (runs in Gunicorn with 4 workers, no background queue workers)
   ai-service:
     build:
       context: ./apps/ai-service
@@ -102,6 +132,7 @@ services:
       QDRANT_HOST: qdrant
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-study_assistant}?schema=public
+      RUN_BACKGROUND_WORKERS: "false"
     ports:
       - "8000:8000"
     depends_on:
@@ -109,6 +140,41 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Isolated BullMQ Worker (handles document parsing and embedding generation in separate process)
+  worker:
+    build:
+      context: ./apps/ai-service
+      dockerfile: Dockerfile
+    container_name: study_assistant_worker
+    restart: always
+    environment:
+      AI_REDIS_HOST: redis
+      AI_REDIS_PORT: 6379
+      AI_REDIS_PASSWORD: ""
+      QDRANT_HOST: qdrant
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/${POSTGRES_DB:-study_assistant}?schema=public
+      RUN_BACKGROUND_WORKERS: "false"
+    command: python run_workers.py
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import redis; r = redis.Redis(host=\"redis\", port=6379); r.ping()'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Qdrant Vector Database
   qdrant:
@@ -128,6 +194,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  postgres_replica_data:
     driver: local
   redis_data:
     driver: local

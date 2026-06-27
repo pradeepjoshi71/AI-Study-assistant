@@ -5,6 +5,7 @@ import { MultiDocRetrievalService } from '../retrieval/multi-doc.retrieval';
 import { GenerateQuizDto, SubmitQuizDto } from './quiz.types';
 import { MessageRole } from '@prisma/client';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { userContextStorage } from '../../common/context/user-context';
 
 @Injectable()
 export class QuizService {
@@ -128,6 +129,7 @@ export class QuizService {
         conversationId,
         title: quizTitle,
         difficulty,
+        orgId: userContextStorage.getStore()?.orgId || null,
         questions: {
           create: generatedQuestions.map((q) => ({
             type: q.type,
@@ -163,7 +165,12 @@ export class QuizService {
       throw new NotFoundException('Quiz not found');
     }
 
-    if (quiz.tenantId !== tenantId) {
+    const orgId = userContextStorage.getStore()?.orgId;
+    if (orgId) {
+      if (quiz.orgId !== orgId) {
+        throw new ForbiddenException('Tenant access denied');
+      }
+    } else if (quiz.tenantId !== tenantId) {
       throw new ForbiddenException('Tenant access denied');
     }
 
@@ -174,11 +181,9 @@ export class QuizService {
    * Lists all quizzes for a user/tenant.
    */
   async listQuizzes(userId: string, tenantId: string) {
+    const orgId = userContextStorage.getStore()?.orgId;
     return this.prisma.quiz.findMany({
-      where: {
-        userId,
-        tenantId,
-      },
+      where: orgId ? { orgId } : { userId, tenantId },
       orderBy: {
         createdAt: 'desc',
       },
@@ -197,7 +202,12 @@ export class QuizService {
       throw new NotFoundException('Quiz not found');
     }
 
-    if (quiz.tenantId !== tenantId) {
+    const orgId = userContextStorage.getStore()?.orgId;
+    if (orgId) {
+      if (quiz.orgId !== orgId) {
+        throw new ForbiddenException('Tenant access denied');
+      }
+    } else if (quiz.tenantId !== tenantId) {
       throw new ForbiddenException('Tenant access denied');
     }
 

@@ -56,12 +56,12 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
-# Uvicorn with production settings:
-# - 2 workers for parallelism (LLM calls are I/O bound)
-# - access log off (handled by CloudWatch)
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "2", \
-     "--loop", "uvloop", \
-     "--no-access-log"]
+# Gunicorn with Uvicorn workers for production readiness:
+# - 4 workers for concurrency
+# - log files piped to stdout/stderr
+CMD ["gunicorn", "app.main:app", \
+     "-w", "4", \
+     "-k", "uvicorn.workers.UvicornWorker", \
+     "-b", "0.0.0.0:8000", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-"]

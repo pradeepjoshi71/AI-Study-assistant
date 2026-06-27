@@ -85,9 +85,9 @@ export class BillingService {
       });
 
       // Add owner as OWNER member
-      await tx.organizationMember.create({
+      await tx.orgMember.create({
         data: {
-          organizationId: org.id,
+          orgId: org.id,
           userId: ownerId,
           role: 'OWNER',
         },
@@ -224,43 +224,63 @@ export class BillingService {
 
   // ─── Portal & Checkout ────────────────────────────────────
 
-  async createBillingPortalSession(organizationId: string, returnUrl: string) {
-    const org = await this.prisma.organization.findUnique({ where: { id: organizationId } });
-    if (!org?.stripeCustomerId) throw new BadRequestException('No billing customer found');
+  async createUserBillingPortalSession(userId: string, returnUrl: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.stripeCustomerId) {
+      throw new BadRequestException('No billing customer associated with this user');
+    }
 
     const session = await this.stripe.createCustomerPortalSession({
-      stripeCustomerId: org.stripeCustomerId,
+      stripeCustomerId: user.stripeCustomerId,
       returnUrl,
     });
     return { url: session.url };
   }
 
-  async createCheckoutSession(
-    organizationId: string,
+  async createUserCheckoutSession(
+    userId: string,
     planType: PlanType,
     cycle: BillingCycle,
     successUrl: string,
     cancelUrl: string,
   ) {
-    const org = await this.prisma.organization.findUnique({ where: { id: organizationId } });
-    if (!org?.stripeCustomerId) throw new BadRequestException('No billing customer');
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    let stripeCustomerId = user.stripeCustomerId;
+    if (!stripeCustomerId) {
+      const customer = await this.stripe.createCustomer({
+        email: user.email,
+        name: user.name || user.email,
+        organizationId: '',
+        metadata: { userId },
+      });
+      stripeCustomerId = customer.id;
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { stripeCustomerId },
+      });
+    }
 
     const plan = await this.plans.findByType(planType);
     if (!plan) throw new NotFoundException('Plan not found');
 
-    const priceId = cycle === BillingCycle.YEARLY
-      ? plan.stripePriceIdYearly
-      : plan.stripePriceIdMonthly;
+    let priceId = plan.stripePriceId;
+    if (!priceId) {
+      priceId = cycle === BillingCycle.YEARLY
+        ? plan.stripePriceIdYearly
+        : plan.stripePriceIdMonthly;
+    }
 
-    if (!priceId) throw new BadRequestException('Plan not available for purchase');
+    if (!priceId) throw new BadRequestException('Plan price not configured');
 
     const session = await this.stripe.createCheckoutSession({
-      stripeCustomerId: org.stripeCustomerId,
+      stripeCustomerId,
       stripePriceId: priceId,
       successUrl,
       cancelUrl,
       trialDays: 14,
-      metadata: { organizationId, planType, cycle },
+      metadata: { userId, planType, cycle },
     });
 
     return { url: session.url };
@@ -282,4 +302,117 @@ export class BillingService {
       take: 20,
     });
   }
+
+  async getBillingSummary(userId: string, orgId?: string) {
+    // ── 1. Resolve org context ─────────────────────────────────────────────
+    let resolvedOrgId = orgId;
+
+    if (!resolvedOrgId) {
+      // Fallback: find user's first/personal org
+      const membership = await this.prisma.orgMember.findFirst({
+        where: { userId },
+        orderBy: { joinedAt: "asc" },
+        select: { orgId: true },
+      });
+      resolvedOrgId = membership?.orgId;
+    }
+
+    // ── 2. Resolve plan (org subscription preferred) ───────────────────────
+    let subscription: any = null;
+    let plan: any = null;
+
+    if (resolvedOrgId) {
+      subscription = await this.prisma.subscription.findUnique({
+        where: { organizationId: resolvedOrgId },
+        include: { plan: true },
+      });
+      plan = subscription?.plan;
+    }
+
+    if (!plan) {
+      const userSub = await this.prisma.subscription.findFirst({
+        where: { userId },
+        include: { plan: true },
+        orderBy: { createdAt: "desc" },
+      });
+      subscription = userSub;
+      plan = userSub?.plan;
+    }
+
+    if (!plan) {
+      plan = await this.prisma.plan.findUnique({ where: { type: PlanType.FREE } });
+    }
+
+    // ── 3. Aggregate token + upload usage by org ───────────────────────────
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+
+    let tokensUsed = subscription?.currentPeriodTokensUsed ?? 0;
+    let uploadsUsed = 0;
+
+    if (resolvedOrgId) {
+      const uploadAgg = await this.prisma.usageRecord.aggregate({
+        where: { orgId: resolvedOrgId, date: { gte: todayStart } },
+        _sum: { uploadsCount: true },
+      });
+      uploadsUsed = uploadAgg._sum.uploadsCount ?? 0;
+    } else {
+      const usageRecord = await this.prisma.usageRecord.findFirst({
+        where: { userId, date: { gte: todayStart } },
+      });
+      uploadsUsed = usageRecord?.uploadsCount ?? 0;
+    }
+
+    // ── 4. Seat usage ──────────────────────────────────────────────────────
+    const seatCount = resolvedOrgId
+      ? await this.prisma.orgMember.count({ where: { orgId: resolvedOrgId } })
+      : 1;
+
+    const seatLimit = plan?.maxUsers ?? null; // null = unlimited
+
+    // ── 5. Invoices ────────────────────────────────────────────────────────
+    const invoices = await this.prisma.invoice.findMany({
+      where: resolvedOrgId ? { organizationId: resolvedOrgId } : { userId },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+
+    return {
+      orgId: resolvedOrgId ?? null,
+      plan: {
+        id: plan?.id,
+        name: plan?.name,
+        type: plan?.type,
+        stripePriceId: plan?.stripePriceId,
+        limits: plan?.limits,
+      },
+      subscription: subscription
+        ? {
+            id: subscription.id,
+            status: subscription.status,
+            currentPeriodEnd: subscription.currentPeriodEnd,
+            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+          }
+        : null,
+      usage: {
+        tokensUsed,
+        tokensLimit: (plan?.limits as any)?.maxTokensPerMonth ?? 50000,
+        uploadsUsed,
+        uploadsLimit: (plan?.limits as any)?.maxDocuments ?? 5,
+        seatCount,
+        seatLimit,
+      },
+      invoices: invoices.map((inv) => ({
+        id: inv.id,
+        stripeInvoiceId: inv.stripeInvoiceId,
+        status: inv.status,
+        amountDueUsdCents: inv.amountDueUsdCents,
+        amountPaidUsdCents: inv.amountPaidUsdCents,
+        hostedInvoiceUrl: inv.hostedInvoiceUrl,
+        invoicePdfUrl: inv.invoicePdfUrl,
+        createdAt: inv.createdAt,
+      })),
+    };
+  }
 }
+

@@ -1,24 +1,28 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Conversation, Message, MessageRole } from '@prisma/client';
+import { userContextStorage } from '../common/context/user-context';
 
 @Injectable()
 export class ConversationService {
   constructor(private prisma: PrismaService) {}
 
   async createConversation(userId: string, title: string): Promise<Conversation> {
+    const orgId = userContextStorage.getStore()?.orgId || null;
     return this.prisma.conversation.create({
       data: {
         userId,
         tenantId: 'default-tenant',
+        orgId,
         title,
       },
     });
   }
 
   async findConversationsByUser(userId: string): Promise<Conversation[]> {
+    const orgId = userContextStorage.getStore()?.orgId;
     return this.prisma.conversation.findMany({
-      where: { userId },
+      where: orgId ? { orgId } : { userId },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -32,7 +36,12 @@ export class ConversationService {
       throw new NotFoundException('Conversation not found');
     }
 
-    if (conversation.userId !== userId) {
+    const orgId = userContextStorage.getStore()?.orgId;
+    if (orgId) {
+      if (conversation.orgId !== orgId) {
+        throw new ForbiddenException('Access denied to this conversation');
+      }
+    } else if (conversation.userId !== userId) {
       throw new ForbiddenException('Access denied to this conversation');
     }
 
@@ -53,7 +62,12 @@ export class ConversationService {
       throw new NotFoundException('Conversation not found');
     }
 
-    if (conversation.userId !== userId) {
+    const orgId = userContextStorage.getStore()?.orgId;
+    if (orgId) {
+      if (conversation.orgId !== orgId) {
+        throw new ForbiddenException('Access denied to this conversation');
+      }
+    } else if (conversation.userId !== userId) {
       throw new ForbiddenException('Access denied to this conversation');
     }
 

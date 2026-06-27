@@ -169,19 +169,19 @@ export class SsoService {
     }
 
     // Enforce organization membership (Auto join workspace)
-    const existingMember = await this.prisma.organizationMember.findUnique({
+    const existingMember = await this.prisma.orgMember.findUnique({
       where: {
-        organizationId_userId: {
-          organizationId,
+        orgId_userId: {
+          orgId: organizationId,
           userId: user.id,
         },
       },
     });
 
     if (!existingMember) {
-      await this.prisma.organizationMember.create({
+      await this.prisma.orgMember.create({
         data: {
-          organizationId,
+          orgId: organizationId,
           userId: user.id,
           role: OrgMemberRole.MEMBER,
         },

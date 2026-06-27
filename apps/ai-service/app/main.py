@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import redis
 from app.core.config import settings
 from app.middleware.observability import ObservabilityMiddleware
+from app.middleware.token_budget import TokenBudgetMiddleware
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,8 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Structured JSON request logging + X-Correlation-ID propagation
+# Observability and Token Budgeting Middlewares
 app.add_middleware(ObservabilityMiddleware)
+app.add_middleware(TokenBudgetMiddleware)
 
 
 @app.get("/health", tags=["Health"])
@@ -50,10 +52,13 @@ app.include_router(knowledge_graph_router, prefix="/ai")
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("FastAPI starting: launching background BullMQ processing worker...")
-    asyncio.create_task(run_worker())
-    logger.info("FastAPI starting: launching background BullMQ embedding worker...")
-    asyncio.create_task(run_embedding_worker())
+    if os.getenv("RUN_BACKGROUND_WORKERS", "true").lower() == "true":
+        logger.info("FastAPI starting: launching background BullMQ processing worker...")
+        asyncio.create_task(run_worker())
+        logger.info("FastAPI starting: launching background BullMQ embedding worker...")
+        asyncio.create_task(run_embedding_worker())
+    else:
+        logger.info("RUN_BACKGROUND_WORKERS is set to false. Skipping background worker tasks in web server.")
 
 # Database setup for API handlers
 import os

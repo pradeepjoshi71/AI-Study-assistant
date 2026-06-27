@@ -31,6 +31,9 @@ FROM node:20-alpine AS runner
 
 WORKDIR /usr/src/app
 
+# Install PM2 globally
+RUN npm install -g pm2
+
 # Set production environment variables
 ENV NODE_ENV=production
 
@@ -59,4 +62,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/v1/health || exit 1
 
-CMD ["npm", "run", "start:prod", "-w", "@study-assistant/api"]
+CMD ["pm2-runtime", "start", "apps/api/ecosystem.config.js"]

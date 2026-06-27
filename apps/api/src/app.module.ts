@@ -33,10 +33,13 @@ import { TutorModule } from "./modules/tutor-agent/tutor.module";
 import { KnowledgeGraphModule } from "./modules/knowledge-graph/knowledge-graph.module";
 import { CommonModule } from "./common/common.module";
 import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.middleware";
+import { UserContextMiddleware } from "./common/middleware/user-context.middleware";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
+import { PlanGuard } from "./common/guards/plan.guard";
 
 // Phase 3.0 SaaS Modules
 import { BillingModule } from "./billing/billing.module";
+import { OrganizationModule } from "./organization/organization.module";
 import { UsageModule } from "./usage/usage.module";
 import { QuotaGuardModule } from "./quota-guard/quota-guard.module";
 import { TeamsModule } from "./teams/teams.module";
@@ -182,6 +185,7 @@ export class HealthController {
     KnowledgeGraphModule,
     CommonModule,
     BillingModule,
+    OrganizationModule,
     UsageModule,
     QuotaGuardModule,
     TeamsModule,
@@ -211,6 +215,10 @@ export class HealthController {
       useClass: TieredThrottlerGuard,
     },
     {
+      provide: APP_GUARD,
+      useClass: PlanGuard,
+    },
+    {
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,
     },
@@ -223,6 +231,6 @@ export class AppModule implements NestModule {
    * gets a correlation ID for distributed tracing.
    */
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+    consumer.apply(CorrelationIdMiddleware, UserContextMiddleware).forRoutes('*');
   }
 }

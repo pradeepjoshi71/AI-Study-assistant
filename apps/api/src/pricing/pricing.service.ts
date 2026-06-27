@@ -57,7 +57,7 @@ export class PricingService {
       where: {
         user: {
           organizationMemberships: {
-            some: { organizationId },
+            some: { orgId: organizationId },
           },
         },
         createdAt: {

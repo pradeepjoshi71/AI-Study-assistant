@@ -34,23 +34,29 @@ enum MessageRole {
 }
 
 model User {
-  id               String           @id @default(uuid())
-  email            String           @unique
-  password         String
-  name             String?
-  avatar           String?
-  role             UserRole         @default(STUDENT)
-  subscriptionPlan SubscriptionPlan @default(FREE)
-  isActive         Boolean          @default(true)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  sessions         Session[]
-  documents        Document[]
-  conversations    Conversation[]
+  id                      String             @id @default(uuid())
+  email                   String             @unique
+  password                String
+  name                    String?
+  avatar                  String?
+  role                    UserRole           @default(STUDENT)
+  subscriptionPlan        SubscriptionPlan   @default(FREE)
+  isActive                Boolean            @default(true)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  sessions                Session[]
+  documents               Document[]
+  conversations           Conversation[]
   // Phase 3.0 — enterprise relations
-  organizationMemberships OrganizationMember[]
+  organizationMemberships OrgMember[]
   // Phase 3.1 — federated identity relations
-  identityProviders     IdentityProvider[]
+  identityProviders       IdentityProvider[]
+
+  stripeCustomerId     String?        @unique
+  stripeSubscriptionId String?        @unique
+  usageRecords         UsageRecord[]
+  invoices             Invoice[]
+  subscriptions        Subscription[] @relation("UserSubscriptions")
 
   @@map("users")
 }
@@ -70,7 +76,7 @@ model Session {
 }
 
 model Document {
-  id                    String           @id @default(uuid())
+  id                    String          @id @default(uuid())
   userId                String
   title                 String
   originalName          String
@@ -79,16 +85,19 @@ model Document {
   fileSize              Int
   fileUrl               String
   storageKey            String
-  status                DocumentStatus   @default(UPLOADED)
+  status                DocumentStatus  @default(UPLOADED)
   pageCount             Int
   extractedTextLength   Int?
   processingStartedAt   DateTime?
   processingCompletedAt DateTime?
   processingError       String?
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
-  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   chunks                DocumentChunk[]
+
+  orgId        String?
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@map("documents")
 }
@@ -117,6 +126,9 @@ model Conversation {
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  Message[]
+
+  orgId        String?
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("conversations")
@@ -154,19 +166,22 @@ model Quiz {
   questions      QuizQuestion[]
   attempts       QuizAttempt[]
 
+  orgId        String?
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
   @@map("quizzes")
 }
 
 model QuizQuestion {
-  id            String   @id @default(uuid())
+  id            String @id @default(uuid())
   quizId        String
-  type          String   // MCQ | TRUE_FALSE | SHORT_ANSWER
-  question      String   @db.Text
-  options       Json?    // Optional MCQ choices list: string[]
-  answer        String   @db.Text
-  explanation   String   @db.Text
+  type          String // MCQ | TRUE_FALSE | SHORT_ANSWER
+  question      String @db.Text
+  options       Json? // Optional MCQ choices list: string[]
+  answer        String @db.Text
+  explanation   String @db.Text
   chunkIdSource String
-  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quiz          Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
   @@map("quiz_questions")
 }
@@ -189,8 +204,8 @@ model Flashcard {
   front         String            @db.Text
   back          String            @db.Text
   chunkIdSource String
-  tags          Json?             // tag words: e.g. ["topic", "difficulty"]
-  createdAt     DateTime          @db.Timestamp(3) @default(now())
+  tags          Json? // tag words: e.g. ["topic", "difficulty"]
+  createdAt     DateTime          @default(now()) @db.Timestamp(3)
   deck          FlashcardDeck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
   reviews       FlashcardReview[]
 
@@ -201,7 +216,7 @@ model AnalyticsSession {
   id        String   @id @default(uuid())
   userId    String
   tenantId  String
-  duration  Int      // in seconds
+  duration  Int // in seconds
   createdAt DateTime @default(now())
 
   @@map("analytics_sessions")
@@ -222,13 +237,13 @@ model QuizAttempt {
 }
 
 model FlashcardReview {
-  id          String    @id @default(uuid())
-  userId      String
-  tenantId    String
-  flashcardId String
-  recallStatus String    // easy | hard | fail
-  createdAt   DateTime  @default(now())
-  flashcard   Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  id           String    @id @default(uuid())
+  userId       String
+  tenantId     String
+  flashcardId  String
+  recallStatus String // easy | hard | fail
+  createdAt    DateTime  @default(now())
+  flashcard    Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
 
   @@map("flashcard_reviews")
 }
@@ -251,7 +266,7 @@ model StudyPlan {
   tenantId  String
   weekStart DateTime
   weekEnd   DateTime
-  status    String      // ACTIVE | COMPLETED | ARCHIVED
+  status    String // ACTIVE | COMPLETED | ARCHIVED
   createdAt DateTime    @default(now())
   tasks     StudyTask[]
 
@@ -261,10 +276,10 @@ model StudyPlan {
 model StudyTask {
   id        String    @id @default(uuid())
   planId    String
-  day       Int       // 1 to 7
-  type      String    // QUIZ | FLASHCARD | READING | REVISION
-  status    String    // PENDING | COMPLETED | MISSED
-  metadata  Json      // details (topic, estimatedTime, chunkIdSources)
+  day       Int // 1 to 7
+  type      String // QUIZ | FLASHCARD | READING | REVISION
+  status    String // PENDING | COMPLETED | MISSED
+  metadata  Json // details (topic, estimatedTime, chunkIdSources)
   createdAt DateTime  @default(now())
   plan      StudyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
@@ -276,7 +291,7 @@ model TutorInsight {
   userId        String
   tenantId      String
   insightText   String   @db.Text
-  priorityLevel String   // HIGH | MEDIUM | LOW
+  priorityLevel String // HIGH | MEDIUM | LOW
   createdAt     DateTime @default(now())
 
   @@map("tutor_insights")
@@ -289,8 +304,8 @@ model TutorInsight {
 model Concept {
   id          String            @id @default(uuid())
   tenantId    String
-  name        String            // normalized lowercase, e.g. "photosynthesis"
-  displayName String            // original casing, e.g. "Photosynthesis"
+  name        String // normalized lowercase, e.g. "photosynthesis"
+  displayName String // original casing, e.g. "Photosynthesis"
   description String?           @db.Text
   confidence  Float             @default(1.0)
   createdAt   DateTime          @default(now())
@@ -309,11 +324,11 @@ model ConceptRelation {
   tenantId      String
   fromConceptId String
   toConceptId   String
-  relationType  String   // EXPLAINS | RELATED_TO | PREREQUISITE_OF | PART_OF
+  relationType  String // EXPLAINS | RELATED_TO | PREREQUISITE_OF | PART_OF
   weight        Float    @default(1.0)
   createdAt     DateTime @default(now())
   fromConcept   Concept  @relation("RelationFrom", fields: [fromConceptId], references: [id], onDelete: Cascade)
-  toConcept     Concept  @relation("RelationTo",   fields: [toConceptId],   references: [id], onDelete: Cascade)
+  toConcept     Concept  @relation("RelationTo", fields: [toConceptId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, fromConceptId, toConceptId, relationType])
   @@index([tenantId, fromConceptId])
@@ -322,7 +337,7 @@ model ConceptRelation {
 
 model ChunkConceptMap {
   id         String   @id @default(uuid())
-  chunkId    String   // logical FK to document_chunks.id
+  chunkId    String // logical FK to document_chunks.id
   conceptId  String
   tenantId   String
   confidence Float    @default(1.0)
@@ -342,12 +357,12 @@ model UsageMetric {
   id        String   @id @default(uuid())
   userId    String
   tenantId  String
-  endpoint  String   // e.g. "chat.send", "quiz.generate"
+  endpoint  String // e.g. "chat.send", "quiz.generate"
   tokensIn  Int      @default(0)
   tokensOut Int      @default(0)
   latencyMs Int      @default(0)
   cacheHit  Boolean  @default(false)
-  model     String?  // e.g. "gemini-1.5-flash"
+  model     String? // e.g. "gemini-1.5-flash"
   createdAt DateTime @default(now())
 
   @@index([tenantId, userId])
@@ -373,13 +388,13 @@ model RequestLog {
 }
 
 model CostTracking {
-  id                String   @id @default(uuid())
-  tenantId          String
-  userId            String
-  period            String   // "2024-06" (year-month bucket)
-  totalTokens       Int      @default(0)
-  estimatedCostUsd  Float    @default(0)
-  updatedAt         DateTime @updatedAt
+  id               String   @id @default(uuid())
+  tenantId         String
+  userId           String
+  period           String // "2024-06" (year-month bucket)
+  totalTokens      Int      @default(0)
+  estimatedCostUsd Float    @default(0)
+  updatedAt        DateTime @updatedAt
 
   @@unique([tenantId, userId, period])
   @@index([tenantId, period])
@@ -457,79 +472,93 @@ enum UsageEventType {
 
 /// Canonical plan definitions — owned by platform admins
 model Plan {
-  id          String      @id @default(uuid())
-  name        String      // "Free", "Pro", "Team", "Enterprise"
-  type        PlanType    @unique
+  id          String   @id @default(uuid())
+  name        String // "Free", "Pro", "Team", "Enterprise"
+  type        PlanType @unique
   description String?
-  isActive    Boolean     @default(true)
+  isActive    Boolean  @default(true)
+
+  // Stripe price & limits requested overrides
+  stripePriceId String? @unique
+  limits        Json?
 
   // Stripe
   stripePriceIdMonthly String?
   stripePriceIdYearly  String?
 
   // Hard limits (null = unlimited)
-  maxUsers           Int?    // max seats per org
-  maxDocuments       Int?    // max docs per org
-  maxStorageGb       Float?  // max S3 storage
-  maxChatsPerDay     Int?    // daily chat quota
-  maxApiCallsPerDay  Int?    // daily API call quota
-  maxTokensPerMonth  Int?    // monthly LLM token budget
+  maxUsers          Int? // max seats per org
+  maxDocuments      Int? // max docs per org
+  maxStorageGb      Float? // max S3 storage
+  maxChatsPerDay    Int? // daily chat quota
+  maxApiCallsPerDay Int? // daily API call quota
+  maxTokensPerMonth Int? // monthly LLM token budget
 
   // Pricing (USD cents)
-  priceMonthlyUsdCents Int   @default(0)
-  priceYearlyUsdCents  Int   @default(0)
+  priceMonthlyUsdCents Int @default(0)
+  priceYearlyUsdCents  Int @default(0)
 
   // Cost per unit (for usage-based billing, USD micro-cents)
-  costPerTokenMicro     Int  @default(0) // cost per 1000 tokens
-  costPerDocumentCents  Int  @default(0)
-  costPerApiCallMicro   Int  @default(0)
-  costPerGbStorageCents Int  @default(0)
+  costPerTokenMicro     Int @default(0) // cost per 1000 tokens
+  costPerDocumentCents  Int @default(0)
+  costPerApiCallMicro   Int @default(0)
+  costPerGbStorageCents Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   subscriptions Subscription[]
+  organizations Organization[]
 
   @@map("plans")
 }
 
 /// Billing tenant — represents a company/workspace (maps 1:1 to Stripe Customer)
 model Organization {
-  id               String   @id @default(uuid())
-  name             String
-  slug             String   @unique // URL-safe identifier
-  logoUrl          String?
-  domain           String?  // e.g. "acme.com" for SSO domain matching
-  isActive         Boolean  @default(true)
-  isSuspended      Boolean  @default(false)
-  suspendedReason  String?
+  id              String  @id @default(uuid())
+  name            String
+  slug            String  @unique // URL-safe identifier
+  logoUrl         String?
+  domain          String? // e.g. "acme.com" for SSO domain matching
+  isActive        Boolean @default(true)
+  isSuspended     Boolean @default(false)
+  suspendedReason String?
 
   // Stripe
-  stripeCustomerId String?  @unique
+  stripeCustomerId String? @unique
 
   // Billing contact
-  billingEmail     String?
-  billingName      String?
-  taxId            String?
+  billingEmail String?
+  billingName  String?
+  taxId        String?
 
   // Usage aggregates (denormalized for fast reads)
-  storageUsedBytes  BigInt  @default(0)
+  storageUsedBytes BigInt @default(0)
 
   // Outbound Webhooks
-  webhookUrl       String?
-  webhookSecret    String?
+  webhookUrl    String?
+  webhookSecret String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members       OrganizationMember[]
-  invitations   Invitation[]
-  subscription  Subscription?
-  invoices      Invoice[]
-  apiKeys       ApiKey[]
-  featureFlags  TenantFeatureOverride[]
-  usageEvents   UsageEvent[]
-  auditLogs     AuditLog[]
+  planId String?
+  plan   Plan?   @relation(fields: [planId], references: [id])
+
+  members           OrgMember[]
+  orgInvites        OrgInvite[]
+  documents         Document[]
+  conversations     Conversation[]
+  quizzes           Quiz[]
+  knowledgeGraph    KnowledgeGraph?
+  usageRecords      UsageRecord[]
+  invitations       Invitation[]
+  subscription      Subscription?
+  invoices          Invoice[]
+  apiKeys           ApiKey[]
+  featureFlags      TenantFeatureOverride[]
+  usageEvents       UsageEvent[]
+  auditLogs         AuditLog[]
   ssoConfigurations SsoConfiguration[]
   domains           Domain[]
   securityEvents    SecurityEvent[]
@@ -552,21 +581,24 @@ model Subscription {
   cycle          BillingCycle       @default(MONTHLY)
 
   // Stripe
-  stripeSubscriptionId String?  @unique
-  stripeItemId         String?  // for quantity/usage-based items
+  stripeSubscriptionId String? @unique
+  stripeItemId         String? // for quantity/usage-based items
 
   // Dates
-  trialStartAt    DateTime?
-  trialEndAt      DateTime?
-  currentPeriodStart DateTime @default(now())
+  trialStartAt       DateTime?
+  trialEndAt         DateTime?
+  currentPeriodStart DateTime  @default(now())
   currentPeriodEnd   DateTime
-  cancelAtPeriodEnd  Boolean  @default(false)
+  cancelAtPeriodEnd  Boolean   @default(false)
   canceledAt         DateTime?
 
   // Usage-based billing snapshot for current period
   currentPeriodChatsUsed    Int @default(0)
   currentPeriodTokensUsed   Int @default(0)
   currentPeriodApiCallsUsed Int @default(0)
+
+  userId String?
+  user   User?   @relation("UserSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -579,20 +611,23 @@ model Subscription {
 }
 
 model Invoice {
-  id             String        @id @default(uuid())
-  organizationId String
-  stripeInvoiceId String?      @unique
-  status         InvoiceStatus @default(DRAFT)
-  amountDueUsdCents  Int       @default(0)
-  amountPaidUsdCents Int       @default(0)
-  currency           String    @default("usd")
+  id                 String        @id @default(uuid())
+  organizationId     String
+  stripeInvoiceId    String?       @unique
+  status             InvoiceStatus @default(DRAFT)
+  amountDueUsdCents  Int           @default(0)
+  amountPaidUsdCents Int           @default(0)
+  currency           String        @default("usd")
   invoicePdfUrl      String?
   hostedInvoiceUrl   String?
   periodStart        DateTime?
   periodEnd          DateTime?
   dueDate            DateTime?
   paidAt             DateTime?
-  createdAt          DateTime  @default(now())
+  userId             String?
+  user               User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -603,11 +638,26 @@ model Invoice {
 /// Idempotent Stripe event log — prevents double-processing webhooks
 model StripeEvent {
   id          String   @id // Stripe event ID (evt_xxx) as PK for idempotency
-  type        String   // e.g. "customer.subscription.updated"
+  type        String // e.g. "customer.subscription.updated"
   processedAt DateTime @default(now())
-  payload     Json     // raw Stripe event object
+  payload     Json // raw Stripe event object
 
   @@map("stripe_events")
+}
+
+model UsageRecord {
+  id           String   @id @default(uuid())
+  userId       String
+  date         DateTime @default(now())
+  tokensUsed   Int      @default(0)
+  uploadsCount Int      @default(0)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  orgId        String?
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("usage_records")
 }
 
 // ─── USAGE DOMAIN ─────────────────────────────
@@ -616,13 +666,13 @@ model StripeEvent {
 model UsageEvent {
   id             String         @id @default(uuid())
   organizationId String
-  userId         String?        // null for API key calls
+  userId         String? // null for API key calls
   apiKeyId       String?
   type           UsageEventType
   tokensIn       Int            @default(0)
   tokensOut      Int            @default(0)
   costUsdMicro   Int            @default(0) // cost in USD micro-cents (1/1000 cent)
-  metadata       Json?          // model name, document id, etc.
+  metadata       Json? // model name, document id, etc.
   createdAt      DateTime       @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -634,21 +684,21 @@ model UsageEvent {
 
 /// Pre-aggregated usage rollups — computed by a background job every hour
 model UsageAggregate {
-  id             String   @id @default(uuid())
+  id             String  @id @default(uuid())
   organizationId String
   userId         String?
-  period         String   // "2024-06-24-14" (yyyy-mm-dd-HH, hourly) or "2024-06-24" (daily)
-  granularity    String   // "hourly" | "daily" | "monthly"
+  period         String // "2024-06-24-14" (yyyy-mm-dd-HH, hourly) or "2024-06-24" (daily)
+  granularity    String // "hourly" | "daily" | "monthly"
 
-  chatMessages        Int @default(0)
-  quizGenerations     Int @default(0)
-  flashcardGenerations Int @default(0)
-  documentProcesses   Int @default(0)
-  apiRequests         Int @default(0)
-  tokensIn            Int @default(0)
-  tokensOut           Int @default(0)
-  totalCostUsdMicro   Int @default(0)
-  storageBytes        BigInt @default(0)
+  chatMessages         Int    @default(0)
+  quizGenerations      Int    @default(0)
+  flashcardGenerations Int    @default(0)
+  documentProcesses    Int    @default(0)
+  apiRequests          Int    @default(0)
+  tokensIn             Int    @default(0)
+  tokensOut            Int    @default(0)
+  totalCostUsdMicro    Int    @default(0)
+  storageBytes         BigInt @default(0)
 
   computedAt DateTime @default(now())
 
@@ -659,29 +709,54 @@ model UsageAggregate {
 
 // ─── TEAMS DOMAIN ─────────────────────────────
 
-model OrganizationMember {
-  id             String        @id @default(uuid())
-  organizationId String
-  userId         String
-  role           OrgMemberRole @default(MEMBER)
-  joinedAt       DateTime      @default(now())
+model OrgMember {
+  id       String        @id @default(uuid())
+  orgId    String
+  userId   String
+  role     OrgMemberRole @default(MEMBER)
+  joinedAt DateTime      @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([organizationId, userId])
+  @@unique([orgId, userId])
   @@index([userId])
-  @@map("organization_members")
+  @@map("org_members")
+}
+
+model OrgInvite {
+  id        String    @id @default(uuid())
+  orgId     String
+  email     String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("org_invites")
+}
+
+model KnowledgeGraph {
+  id        String   @id @default(uuid())
+  orgId     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("knowledge_graphs")
 }
 
 model Invitation {
   id             String           @id @default(uuid())
   organizationId String
-  email          String           // invitee email
+  email          String // invitee email
   role           OrgMemberRole    @default(MEMBER)
   token          String           @unique // signed invite token
   status         InvitationStatus @default(PENDING)
-  invitedById    String           // userId of inviter
+  invitedById    String // userId of inviter
   expiresAt      DateTime
   acceptedAt     DateTime?
   createdAt      DateTime         @default(now())
@@ -697,31 +772,31 @@ model Invitation {
 
 /// API keys stored as prefix + SHA-256 hash (never plaintext)
 model ApiKey {
-  id             String      @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
-  name           String      // human-readable label
-  keyPrefix      String      // first 8 chars: "sk_live_" (shown in UI)
-  keyHash        String      @unique // SHA-256 of full key
+  name           String // human-readable label
+  keyPrefix      String // first 8 chars: "sk_live_" (shown in UI)
+  keyHash        String       @unique // SHA-256 of full key
   status         ApiKeyStatus @default(ACTIVE)
 
   // Permissions (which API products this key can access)
-  permissions    Json        // string[]: ["chat", "quiz", "flashcard", "analytics"]
+  permissions Json // string[]: ["chat", "quiz", "flashcard", "analytics"]
 
   // Quota overrides (null = use org plan limits)
-  dailyCallLimit Int?
+  dailyCallLimit    Int?
   monthlyTokenLimit Int?
 
   // Usage tracking (denormalized for fast checks)
-  totalCallCount  Int      @default(0)
-  lastUsedAt      DateTime?
+  totalCallCount Int       @default(0)
+  lastUsedAt     DateTime?
 
-  expiresAt  DateTime?
-  revokedAt  DateTime?
-  createdById String?   // userId
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdById String? // userId
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   usageLogs    ApiUsageLog[]
 
   @@index([organizationId, status])
@@ -729,14 +804,14 @@ model ApiKey {
 }
 
 model ApiUsageLog {
-  id       String   @id @default(uuid())
-  apiKeyId String
-  endpoint String
-  method   String
+  id         String   @id @default(uuid())
+  apiKeyId   String
+  endpoint   String
+  method     String
   statusCode Int
-  tokensIn   Int    @default(0)
-  tokensOut  Int    @default(0)
-  latencyMs  Int    @default(0)
+  tokensIn   Int      @default(0)
+  tokensOut  Int      @default(0)
+  latencyMs  Int      @default(0)
   createdAt  DateTime @default(now())
 
   apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
@@ -749,11 +824,11 @@ model ApiUsageLog {
 
 /// Global feature catalog
 model FeatureFlag {
-  id           String   @id @default(uuid())
-  key          String   @unique // e.g. "knowledge_graph", "tutor_agent"
+  id           String  @id @default(uuid())
+  key          String  @unique // e.g. "knowledge_graph", "tutor_agent"
   description  String?
-  defaultValue Boolean  @default(false) // global default
-  enabledPlans Json     // PlanType[]: which plans get this by default
+  defaultValue Boolean @default(false) // global default
+  enabledPlans Json // PlanType[]: which plans get this by default
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -770,8 +845,8 @@ model TenantFeatureOverride {
   featureFlagId  String
   enabled        Boolean
 
-  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  featureFlag   FeatureFlag  @relation(fields: [featureFlagId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  featureFlag  FeatureFlag  @relation(fields: [featureFlagId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, featureFlagId])
   @@map("tenant_feature_overrides")
@@ -783,13 +858,13 @@ model TenantFeatureOverride {
 model AuditLog {
   id             String   @id @default(uuid())
   organizationId String?
-  actorId        String?  // userId or "system"
-  actorType      String   // "user" | "admin" | "system" | "api_key"
-  action         String   // "subscription.upgraded", "user.invited", etc.
-  resourceType   String?  // "subscription", "user", "api_key", etc.
+  actorId        String? // userId or "system"
+  actorType      String // "user" | "admin" | "system" | "api_key"
+  action         String // "subscription.upgraded", "user.invited", etc.
+  resourceType   String? // "subscription", "user", "api_key", etc.
   resourceId     String?
-  correlationId  String?  // Tracing ID for request lifecycle
-  metadata       Json?    // before/after state diff
+  correlationId  String? // Tracing ID for request lifecycle
+  metadata       Json? // before/after state diff
   ipAddress      String?
   userAgent      String?
   createdAt      DateTime @default(now())
@@ -804,8 +879,8 @@ model AuditLog {
 model IdentityProvider {
   id             String   @id @default(uuid())
   userId         String
-  provider       String   // "GOOGLE" | "AZURE" | "OKTA" | "SAML"
-  providerUserId String   // Unique ID from identity provider
+  provider       String // "GOOGLE" | "AZURE" | "OKTA" | "SAML"
+  providerUserId String // Unique ID from identity provider
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -818,18 +893,18 @@ model IdentityProvider {
 model SsoConfiguration {
   id             String   @id @default(uuid())
   organizationId String
-  providerType   String   // "SAML" | "OIDC"
-  entryPoint     String   // IdP Sign-on URL
-  issuer         String   // Entity ID / Issuer URI
+  providerType   String // "SAML" | "OIDC"
+  entryPoint     String // IdP Sign-on URL
+  issuer         String // Entity ID / Issuer URI
   cert           String?  @db.Text // Public X.509 certificate for SAML signature validation
-  clientId       String?  // OIDC client ID
-  clientSecret   String?  // OIDC client secret
-  wellKnownUrl   String?  // OIDC metadata URL
+  clientId       String? // OIDC client ID
+  clientSecret   String? // OIDC client secret
+  wellKnownUrl   String? // OIDC metadata URL
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("sso_configurations")
 }
@@ -841,7 +916,7 @@ model Domain {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("domains")
 }
@@ -850,14 +925,14 @@ model SecurityEvent {
   id             String   @id @default(uuid())
   userId         String?
   organizationId String?
-  eventType      String   // "login_failed" | "geo_velocity_anomaly" | "brute_force" | "mfa_bypass"
-  severity       String   // "INFO" | "WARNING" | "CRITICAL"
+  eventType      String // "login_failed" | "geo_velocity_anomaly" | "brute_force" | "mfa_bypass"
+  severity       String // "INFO" | "WARNING" | "CRITICAL"
   ipAddress      String?
   userAgent      String?
   metadata       Json?
   createdAt      DateTime @default(now())
 
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
   @@index([userId, createdAt])
@@ -865,27 +940,27 @@ model SecurityEvent {
 }
 
 model Plugin {
-  id                    String          @id @default(uuid())
-  key                   String          @unique // e.g. "wolfram_alpha"
+  id                    String   @id @default(uuid())
+  key                   String   @unique // e.g. "wolfram_alpha"
   name                  String
   version               String
   description           String
-  permissions           Json            // string[]: ["read_documents", "external_api_call"]
-  inputSchema           Json            // JSON Schema defining inputs
-  outputSchema          Json            // JSON Schema defining outputs
-  endpointUrl           String?         // URL for remote HTTP tool calls
-  scriptCode            String?         @db.Text // Sandboxed JS code (optional)
-  authType              String          @default("NONE") // "NONE" | "API_KEY" | "OAUTH"
-  priceMonthlyCents     Int             @default(0)
-  costPerExecutionCents Int             @default(0)
-  isActive              Boolean         @default(true)
-  authorId              String          // User ID of developer
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  permissions           Json // string[]: ["read_documents", "external_api_call"]
+  inputSchema           Json // JSON Schema defining inputs
+  outputSchema          Json // JSON Schema defining outputs
+  endpointUrl           String? // URL for remote HTTP tool calls
+  scriptCode            String?  @db.Text // Sandboxed JS code (optional)
+  authType              String   @default("NONE") // "NONE" | "API_KEY" | "OAUTH"
+  priceMonthlyCents     Int      @default(0)
+  costPerExecutionCents Int      @default(0)
+  isActive              Boolean  @default(true)
+  authorId              String // User ID of developer
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  installs              PluginInstall[]
-  usageLogs             PluginUsageLog[]
-  ratings               PluginRating[]
+  installs  PluginInstall[]
+  usageLogs PluginUsageLog[]
+  ratings   PluginRating[]
 
   @@map("plugins")
 }
@@ -895,11 +970,11 @@ model PluginInstall {
   organizationId String
   pluginId       String
   installedById  String
-  config         Json?    // Encrypted API keys or credentials needed for the plugin
+  config         Json? // Encrypted API keys or credentials needed for the plugin
   createdAt      DateTime @default(now())
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  plugin         Plugin       @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plugin       Plugin       @relation(fields: [pluginId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, pluginId])
   @@map("plugin_installs")
@@ -916,8 +991,8 @@ model PluginUsageLog {
   costCents      Float    @default(0)
   createdAt      DateTime @default(now())
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  plugin         Plugin       @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plugin       Plugin       @relation(fields: [pluginId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, pluginId])
   @@map("plugin_usage_logs")
@@ -927,11 +1002,11 @@ model PluginRating {
   id        String   @id @default(uuid())
   pluginId  String
   userId    String
-  rating    Int      // 1 to 5
+  rating    Int // 1 to 5
   review    String?  @db.Text
   createdAt DateTime @default(now())
 
-  plugin    Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  plugin Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
 
   @@unique([pluginId, userId])
   @@map("plugin_ratings")
@@ -954,19 +1029,19 @@ enum AutonomousActionStatus {
 }
 
 model AutonomousAction {
-  id             String                 @id @default(uuid())
-  organizationId String
-  actionType     AutonomousActionType
-  status         AutonomousActionStatus @default(PENDING_VALIDATION)
-  triggerReason  String                 @db.Text
-  proposalDetails Json                  // Proposed prompt, plugin spec, or param tuning
-  validationLogs String?                @db.Text
-  feedbackMsg    String?                @db.Text
-  approvedById   String?
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
+  id              String                 @id @default(uuid())
+  organizationId  String
+  actionType      AutonomousActionType
+  status          AutonomousActionStatus @default(PENDING_VALIDATION)
+  triggerReason   String                 @db.Text
+  proposalDetails Json // Proposed prompt, plugin spec, or param tuning
+  validationLogs  String?                @db.Text
+  feedbackMsg     String?                @db.Text
+  approvedById    String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, status])
   @@map("autonomous_actions")
@@ -981,12 +1056,12 @@ model AiGeneratedTool {
   inputSchema    Json
   outputSchema   Json
   scriptCode     String                 @db.Text
-  testSuiteData  Json                   // Input/output pairs used for sandbox validation
+  testSuiteData  Json // Input/output pairs used for sandbox validation
   status         AutonomousActionStatus @default(PENDING_VALIDATION)
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("ai_generated_tools")
 }
@@ -999,22 +1074,22 @@ model LearningMetric {
   dimensions     Json?
   createdAt      DateTime @default(now())
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, metricName, createdAt])
   @@map("learning_metrics")
 }
 
 model PromptTemplateVersion {
-  id             String   @id @default(uuid())
-  mode           String   // "study" | "quiz" | "flashcard"
-  version        Int
-  systemPrompt   String   @db.Text
-  isActive       Boolean  @default(false)
-  accuracyScore  Float?
-  tokenCount     Int?
-  createdById    String?
-  createdAt      DateTime @default(now())
+  id            String   @id @default(uuid())
+  mode          String // "study" | "quiz" | "flashcard"
+  version       Int
+  systemPrompt  String   @db.Text
+  isActive      Boolean  @default(false)
+  accuracyScore Float?
+  tokenCount    Int?
+  createdById   String?
+  createdAt     DateTime @default(now())
 
   @@unique([mode, version])
   @@map("prompt_template_versions")
@@ -1029,33 +1104,33 @@ enum AiTaskStatus {
 }
 
 model AiTask {
-  id             String       @id @default(uuid())
-  tenantId       String
-  type           String       // "CHAT", "EMBEDDING", "SUMMARIZATION", "REASONING", "BATCH"
-  status         AiTaskStatus @default(QUEUED)
-  costCents      Float        @default(0)
-  latencyMs      Int          @default(0)
-  inputData      Json
-  outputData     Json?
-  errorLogs      String?      @db.Text
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id         String       @id @default(uuid())
+  tenantId   String
+  type       String // "CHAT", "EMBEDDING", "SUMMARIZATION", "REASONING", "BATCH"
+  status     AiTaskStatus @default(QUEUED)
+  costCents  Float        @default(0)
+  latencyMs  Int          @default(0)
+  inputData  Json
+  outputData Json?
+  errorLogs  String?      @db.Text
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
-  organization   Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, status])
   @@map("ai_tasks")
 }
 
 model AiComputeLog {
-  id             String   @id @default(uuid())
-  executionId    String
-  model          String
-  tokensIn       Int      @default(0)
-  tokensOut      Int      @default(0)
-  costCents      Float    @default(0)
-  latencyMs      Int      @default(0)
-  createdAt      DateTime @default(now())
+  id          String   @id @default(uuid())
+  executionId String
+  model       String
+  tokensIn    Int      @default(0)
+  tokensOut   Int      @default(0)
+  costCents   Float    @default(0)
+  latencyMs   Int      @default(0)
+  createdAt   DateTime @default(now())
 
   @@index([executionId])
   @@map("ai_compute_logs")
@@ -1065,14 +1140,14 @@ model AiSchedule {
   id             String   @id @default(uuid())
   tenantId       String
   cronExpression String
-  taskType       String   // "graph_update", "study_plan", "memory_summarization"
+  taskType       String // "graph_update", "study_plan", "memory_summarization"
   params         Json?
   nextRun        DateTime
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization   Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("ai_schedules")
 }

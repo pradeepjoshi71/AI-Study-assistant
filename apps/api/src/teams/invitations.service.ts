@@ -23,9 +23,9 @@ export class InvitationsService {
     invitedById: string;
   }) {
     // Check if email already a member
-    const existingMember = await this.prisma.organizationMember.findFirst({
+    const existingMember = await this.prisma.orgMember.findFirst({
       where: {
-        organizationId: params.organizationId,
+        orgId: params.organizationId,
         user: { email: params.email },
       },
     });
@@ -85,9 +85,9 @@ export class InvitationsService {
 
     // Add to org + mark invitation accepted in a transaction
     await this.prisma.$transaction(async (tx) => {
-      await tx.organizationMember.upsert({
-        where: { organizationId_userId: { organizationId: invitation.organizationId, userId } },
-        create: { organizationId: invitation.organizationId, userId, role: invitation.role },
+      await tx.orgMember.upsert({
+        where: { orgId_userId: { orgId: invitation.organizationId, userId } },
+        create: { orgId: invitation.organizationId, userId, role: invitation.role },
         update: {},
       });
       await tx.invitation.update({
