@@ -2,12 +2,17 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LogSessionDto, LogQuizAttemptDto, LogFlashcardReviewDto, RecallStatus } from './analytics.types';
 
+import { EventEmitter2 } from '@nestjs/event-emitter';
+
 @Injectable()
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
   private readonly decayRate = 0.05; // 5% decay per day
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private eventEmitter: EventEmitter2,
+  ) {}
 
   /**
    * Logs a study session duration.
@@ -21,6 +26,21 @@ export class AnalyticsService {
       },
     });
     this.logger.log(`Logged study session: ${dto.duration}s for user ${userId}`);
+
+    // If session is 30 minutes (1800s) threshold or longer, award session XP
+    if (dto.duration >= 1800) {
+      // Resolve orgId context if any
+      const membership = await this.prisma.orgMember.findFirst({
+        where: { userId },
+        orderBy: { joinedAt: "asc" },
+      });
+      this.eventEmitter.emit("session.timer_threshold_reached", {
+        userId,
+        orgId: membership?.orgId || null,
+        sessionId: session.id,
+      });
+    }
+
     return session;
   }
 
@@ -47,6 +67,13 @@ export class AnalyticsService {
     });
 
     this.logger.log(`Logged quiz attempt for quiz ${quizId}. Score: ${score}%`);
+
+    // Emit quiz.completed event for XP award
+    this.eventEmitter.emit("quiz.completed", {
+      userId,
+      orgId: attempt.quiz.orgId || null,
+      attemptId: attempt.id,
+    });
 
     // Asynchronously update topic mastery based on quiz title/topics
     const topic = attempt.quiz.title.replace('Quiz: ', '').trim();
@@ -76,6 +103,19 @@ export class AnalyticsService {
     });
 
     this.logger.log(`Logged flashcard review for card ${flashcardId}. Status: ${recallStatus}`);
+
+    // Resolve orgId context if any
+    const membership = await this.prisma.orgMember.findFirst({
+      where: { userId },
+      orderBy: { joinedAt: "asc" },
+    });
+
+    // Emit flashcard.reviewed event for XP award
+    this.eventEmitter.emit("flashcard.reviewed", {
+      userId,
+      orgId: membership?.orgId || null,
+      reviewId: review.id,
+    });
 
     // Resolve topic from flashcard tags
     const tags = review.flashcard.tags as string[] || [];

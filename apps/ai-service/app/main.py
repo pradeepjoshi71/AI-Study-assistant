@@ -42,6 +42,9 @@ from app.api.study_engine import router as study_engine_router
 from app.api.analytics_insights import router as analytics_insights_router
 from app.api.tutor_agent import router as tutor_agent_router
 from app.api.knowledge_graph import router as knowledge_graph_router
+from app.api.pipeline import router as pipeline_router
+from app.api.chunk_embed import router as chunk_embed_router
+from app.api.upsert import router as upsert_router
 app.include_router(chat_stream_router, prefix="/ai")
 app.include_router(memory_summarizer_router, prefix="/ai")
 app.include_router(synthesis_engine_router, prefix="/ai")
@@ -49,6 +52,9 @@ app.include_router(study_engine_router, prefix="/ai")
 app.include_router(analytics_insights_router, prefix="/ai")
 app.include_router(tutor_agent_router, prefix="/ai")
 app.include_router(knowledge_graph_router, prefix="/ai")
+app.include_router(pipeline_router, prefix="/ai")
+app.include_router(chunk_embed_router, prefix="/ai")
+app.include_router(upsert_router, prefix="/ai")
 
 @app.on_event("startup")
 async def startup_event():

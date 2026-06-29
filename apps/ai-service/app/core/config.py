@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # Google Gemini API Key
     GEMINI_API_KEY: str = ""
 
+    # OpenAI API Key
+    OPENAI_API_KEY: str = ""
+
     model_config = SettingsConfigDict(
         env_file=("../../.env", ".env"),
         env_file_encoding="utf-8",

@@ -13,6 +13,8 @@ import { RegisterDto } from "./dtos/register.dto";
 import { LoginDto } from "./dtos/login.dto";
 import * as bcrypt from "bcrypt";
 
+import { XPService } from "../gamification/xp.service";
+
 @Injectable()
 export class AuthService {
   private readonly accessSecret: string;
@@ -23,6 +25,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private prisma: PrismaService,
+    private xpService: XPService,
   ) {
     this.accessSecret = this.configService.get<string>(
       "JWT_ACCESS_SECRET",
@@ -66,6 +69,26 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException("Invalid email or password");
+    }
+
+    // Award daily login XP
+    try {
+      const todayStr = new Date().toISOString().split("T")[0];
+      // Fetch user's first/default organization for context if any
+      const membership = await this.prisma.orgMember.findFirst({
+        where: { userId: user.id },
+        orderBy: { joinedAt: "asc" },
+      });
+      const orgId = membership?.orgId || null;
+
+      await this.xpService.award(
+        user.id,
+        orgId,
+        "DAILY_LOGIN",
+        `xp:daily_login:${user.id}:${todayStr}`
+      );
+    } catch (xpErr) {
+      // Don't block login if XP fails
     }
 
     return this.generateTokensForUser(user.id, user.email);

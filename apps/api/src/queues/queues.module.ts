@@ -18,6 +18,7 @@ const QUEUE_NAMES = [
   'memory-summarization',
   'cost-aggregation',
   'org-notifications',
+  'badge-check',
 ];
 
 @Module({

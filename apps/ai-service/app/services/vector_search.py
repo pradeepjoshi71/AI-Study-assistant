@@ -13,7 +13,7 @@ class VectorSearchService:
     def __init__(self):
         self.qdrant_host = settings.QDRANT_HOST
         self.qdrant_port = settings.QDRANT_PORT
-        self.collection_name = "document_chunks"
+        self.collection_name = "study_chunks"
 
         # Initialize Qdrant Client
         try:
@@ -34,7 +34,7 @@ class VectorSearchService:
 
     def _init_collection(self):
         """
-        Creates the document_chunks collection in Qdrant if it does not exist,
+        Creates the study_chunks collection in Qdrant if it does not exist,
         and sets up payload indexes for filtering and text search.
         """
         if not self.client:
@@ -45,10 +45,10 @@ class VectorSearchService:
 
         if not exists:
             logger.info(f"Creating Qdrant collection: '{self.collection_name}'")
-            # text-embedding-004 returns 768-dimensional vectors
+            # OpenAI text-embedding-3-small returns 1536-dimensional vectors
             self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config=VectorParams(size=768, distance=Distance.COSINE),
+                vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
             )
 
             # Create payload indexes for fast metadata filtering
@@ -82,25 +82,13 @@ class VectorSearchService:
 
     def get_embedding(self, text: str, is_query: bool = False) -> List[float]:
         """
-        Generates 768-dimensional vector embedding for the input text using Gemini text-embedding-004.
-        Falls back to generating mock random vectors if Gemini API credentials are not set.
+        Generates 1536-dimensional vector embedding for the input text using OpenAI text-embedding-3-small.
+        Delegates to EmbeddingService to reuse cache and OpenAI client.
         """
-        if not self.has_gemini:
-            # Return deterministic mock vector for local testing
-            random.seed(hash(text))
-            return [random.uniform(-1.0, 1.0) for _ in range(768)]
-
-        try:
-            task_type = "retrieval_query" if is_query else "retrieval_document"
-            result = genai.embed_content(
-                model="models/text-embedding-004",
-                content=text,
-                task_type=task_type
-            )
-            return result["embedding"]
-        except Exception as e:
-            logger.error(f"Gemini embedding generation failed: {e}")
-            raise e
+        from app.services.embedding_service import EmbeddingService
+        service = EmbeddingService()
+        result = service.get_embeddings([text])
+        return result[0]
 
     def upsert_chunks(self, chunks: List[Dict[str, Any]], userId: str, fileType: str) -> bool:
         """

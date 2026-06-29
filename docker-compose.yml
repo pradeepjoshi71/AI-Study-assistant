@@ -78,12 +78,21 @@ services:
       NEXT_PUBLIC_AI_SERVICE_URL: http://ai-service:8000
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
+      # MinIO / S3-compatible storage
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-study-assistant}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_USE_SSL: "false"
     ports:
       - "3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/v1/health"]
@@ -176,6 +185,47 @@ services:
       timeout: 10s
       retries: 3
 
+  # MinIO Object Storage (S3-compatible, Minio for local / self-hosted)
+  minio:
+    image: minio/minio:RELEASE.2024-04-06T05-26-02Z
+    container_name: study_assistant_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # MinIO bucket initialiser (creates default bucket on first boot)
+  minio-init:
+    image: minio/mc:RELEASE.2024-04-01T11-31-24Z
+    container_name: study_assistant_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 $${MINIO_ACCESS_KEY:-minioadmin} $${MINIO_SECRET_KEY:-minioadmin};
+        mc mb --ignore-existing local/$${MINIO_BUCKET:-study-assistant};
+        mc anonymous set download local/$${MINIO_BUCKET:-study-assistant};
+        exit 0;
+      "
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-study-assistant}
+    restart: "no"
+
   # Qdrant Vector Database
   qdrant:
     image: qdrant/qdrant:latest
@@ -200,4 +250,6 @@ volumes:
   redis_data:
     driver: local
   qdrant_data:
+    driver: local
+  minio_data:
     driver: local

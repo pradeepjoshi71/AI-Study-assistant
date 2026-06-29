@@ -25,3 +25,11 @@ opentelemetry-instrumentation-redis>=0.45b0
 opentelemetry-instrumentation-sqlalchemy>=0.45b0
 prometheus-client>=0.20.0
 gunicorn>=22.0.0
+yt-dlp>=2024.3.10
+faster-whisper>=0.10.1
+playwright>=1.42.0
+readability-lxml>=0.8.1
+beautifulsoup4>=4.12.3
+openai>=1.12.0
+
+

@@ -6,12 +6,15 @@ import {
   Logger,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { S3Service } from "../storage/s3.service";
+import { StorageService } from "../storage/storage.service";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 import { Document, DocumentStatus } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { userContextStorage } from "../common/context/user-context";
+import { createId } from "@paralleldrive/cuid2";
+
+import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class DocumentsService {
@@ -19,9 +22,10 @@ export class DocumentsService {
 
   constructor(
     private prisma: PrismaService,
-    private s3Service: S3Service,
+    private storage: StorageService,
     @InjectQueue("document-processing") private documentQueue: Queue,
     private eventEmitter: EventEmitter2,
+    private configService: ConfigService,
   ) {}
 
   async upload(
@@ -29,44 +33,44 @@ export class DocumentsService {
     userId: string,
     customTitle?: string,
   ): Promise<Document> {
-    if (!file) {
-      throw new BadRequestException("No file provided");
-    }
+    if (!file) throw new BadRequestException("No file provided");
 
-    this.logger.log(
-      `Starting file upload for user: ${userId}, file: ${file.originalname}`,
-    );
-
-    // 1. Upload to S3
-    let s3Result;
-    try {
-      s3Result = await this.s3Service.uploadFile(file, userId);
-    } catch (err: any) {
-      this.logger.error(`S3 Upload error: ${err.message}`);
-      throw new BadRequestException("Failed to upload file to storage");
-    }
-
+    const orgId = userContextStorage.getStore()?.orgId ?? "personal";
+    const docId = createId(); // pre-generate so we can use it in the storage key
     const title = customTitle || file.originalname;
     const fileExtension = file.originalname.split(".").pop() || "";
 
-    // 2. Save Document metadata in PostgreSQL
+    this.logger.log(
+      `Uploading: user=${userId} org=${orgId} doc=${docId} file=${file.originalname}`,
+    );
+
+    // ── 1. Upload to Minio → orgs/{orgId}/docs/{docId}/{filename} ──────────
+    let storageResult: Awaited<ReturnType<StorageService["upload"]>>;
+    try {
+      storageResult = await this.storage.upload(file, orgId, docId);
+    } catch (err: any) {
+      this.logger.error(`Storage upload error: ${err.message}`);
+      throw new BadRequestException("Failed to upload file to storage");
+    }
+
+    // ── 2. Persist Document metadata (PENDING until worker finishes) ────────
     const document = await this.prisma.document.create({
       data: {
+        id: docId,
         userId,
+        orgId: orgId === "personal" ? null : orgId,
         title,
         originalName: file.originalname,
         fileType: fileExtension.toUpperCase(),
         mimeType: file.mimetype,
-        fileSize: file.size,
-        fileUrl: s3Result.url,
-        storageKey: s3Result.key,
-        status: DocumentStatus.UPLOADED,
-        pageCount: 0, // Placeholder, updated in worker step if PDF
-        orgId: userContextStorage.getStore()?.orgId || null,
+        sizeBytes: file.size,
+        fileUrl: storageResult.url,
+        storageKey: storageResult.key,
+        status: DocumentStatus.PENDING,
       },
     });
 
-    // 3. Dispatch BullMQ background processing job
+    // ── 3. Dispatch BullMQ processing job ───────────────────────────────────
     try {
       await this.documentQueue.add("process-document", {
         documentId: document.id,
@@ -74,16 +78,13 @@ export class DocumentsService {
       this.logger.log(`Dispatched processing job for document: ${document.id}`);
     } catch (err: any) {
       this.logger.error(
-        `Failed to dispatch BullMQ job for document: ${document.id}. Error: ${err.message}`,
+        `Failed to dispatch BullMQ job for document ${document.id}: ${err.message}`,
       );
-      // Don't fail the upload request, the worker can poll or database admin can retry
+      // Don't fail the upload — worker can be re-triggered manually
     }
 
-    // 4. Emit event for event-driven invalidation of RAG cache
-    this.eventEmitter.emit("document.uploaded", {
-      userId,
-      documentId: document.id,
-    });
+    // ── 4. Emit for cache invalidation ──────────────────────────────────────
+    this.eventEmitter.emit("document.uploaded", { userId, documentId: document.id });
 
     return document;
   }
@@ -97,19 +98,13 @@ export class DocumentsService {
   }
 
   async findOne(id: string, userId: string): Promise<Document> {
-    const document = await this.prisma.document.findUnique({
-      where: { id },
-    });
-
-    if (!document) {
-      throw new NotFoundException("Document not found");
-    }
+    const document = await this.prisma.document.findUnique({ where: { id } });
+    if (!document) throw new NotFoundException("Document not found");
 
     const orgId = userContextStorage.getStore()?.orgId;
     if (orgId) {
-      if (document.orgId !== orgId) {
+      if (document.orgId !== orgId)
         throw new ForbiddenException("You do not have access to this document");
-      }
     } else if (document.userId !== userId) {
       throw new ForbiddenException("You do not have access to this document");
     }
@@ -117,32 +112,53 @@ export class DocumentsService {
     return document;
   }
 
-  async delete(
-    id: string,
-    userId: string,
-  ): Promise<{ success: boolean; message: string }> {
+  async delete(id: string, userId: string): Promise<{ success: boolean; message: string }> {
     const document = await this.findOne(id, userId);
 
-    this.logger.log(`Deleting file from S3: Key ${document.storageKey}`);
+    // 1. Delete Qdrant vectors
+    this.logger.log(`Deleting Qdrant vectors for docId=${id}`);
     try {
-      await this.s3Service.deleteFile(document.storageKey);
+      const aiServiceUrl =
+        this.configService.get<string>("NEXT_PUBLIC_AI_SERVICE_URL") ||
+        "http://localhost:8000";
+
+      const res = await fetch(`${aiServiceUrl}/ai/pipeline/upsert`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          documentId: id,
+          orgId: document.orgId || "personal",
+          chunks: [],
+        }),
+      });
+      if (!res.ok) {
+        this.logger.warn(`FastAPI delete call failed: ${res.statusText}`);
+      }
     } catch (err: any) {
-      this.logger.error(`S3 Delete error: ${err.message}`);
-      // Continue to delete from DB even if S3 fails to avoid orphan records in DB
+      this.logger.error(`FastAPI delete error: ${err.message}`);
     }
 
-    await this.prisma.document.delete({
-      where: { id },
-    });
+    // 2. Delete MinIO file
+    this.logger.log(`Deleting from storage: key=${document.storageKey}`);
+    try {
+      await this.storage.delete(document.storageKey);
+    } catch (err: any) {
+      this.logger.error(`Storage delete error: ${err.message}`);
+    }
 
+    // 3. Delete database record
+    await this.prisma.document.delete({ where: { id } });
     return { success: true, message: "Document deleted successfully" };
   }
 
-  async findChunks(id: string, userId: string) {
-    // 1. Validate ownership
-    await this.findOne(id, userId);
+  /** Returns a 1-hour presigned GET URL for the document's storage key. */
+  async getSignedUrl(id: string, userId: string, expiresIn = 3600): Promise<string> {
+    const document = await this.findOne(id, userId);
+    return this.storage.getSignedUrl(document.storageKey, expiresIn);
+  }
 
-    // 2. Fetch chunks
+  async findChunks(id: string, userId: string) {
+    await this.findOne(id, userId);
     return this.prisma.documentChunk.findMany({
       where: { documentId: id },
       orderBy: { chunkIndex: "asc" },
@@ -153,7 +169,8 @@ export class DocumentsService {
     const doc = await this.findOne(id, userId);
     return {
       status: doc.status,
-      error: doc.processingError,
+      errorMessage: doc.errorMessage,
+      chunkCount: doc.chunkCount,
       startedAt: doc.processingStartedAt,
       completedAt: doc.processingCompletedAt,
     };
@@ -163,11 +180,12 @@ export class DocumentsService {
     const doc = await this.findOne(id, userId);
     return {
       originalName: doc.originalName,
-      fileSize: doc.fileSize,
+      sizeBytes: doc.sizeBytes,
       mimeType: doc.mimeType,
       fileUrl: doc.fileUrl,
       storageKey: doc.storageKey,
       pageCount: doc.pageCount,
+      chunkCount: doc.chunkCount,
       extractedTextLength: doc.extractedTextLength,
     };
   }

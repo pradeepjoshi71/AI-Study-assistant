@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { EventEmitterModule } from "@nestjs/event-emitter";
+import { ScheduleModule } from "@nestjs/schedule";
 import { RedisThrottlerStorage } from "./common/throttler/redis-throttler-storage";
 import { TieredThrottlerGuard } from "./common/throttler/tiered-throttler.guard";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -70,6 +71,7 @@ import { AiOsModule } from "./ai-os/ai-os.module";
 
 // Phase 4.0 Global Ecosystem Metrics
 import { MetricsModule } from "./platform/metrics/metrics.module";
+import { GamificationModule } from "./gamification/gamification.module";
 
 
 @Controller("health")
@@ -134,6 +136,7 @@ export class HealthController {
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
@@ -207,6 +210,7 @@ export class HealthController {
     AiOsModule,
     // Phase 4.0 — Global Ecosystem Metrics
     MetricsModule,
+    GamificationModule,
   ],
   controllers: [HealthController],
   providers: [

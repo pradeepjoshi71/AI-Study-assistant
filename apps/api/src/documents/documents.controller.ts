@@ -11,7 +11,12 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  Sse,
+  MessageEvent,
 } from "@nestjs/common";
+import { Observable } from "rxjs";
+import { ConfigService } from "@nestjs/config";
+import Redis from "ioredis";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { DocumentsService } from "./documents.service";
 import { UploadDocumentDto } from "./dto/upload-document.dto";
@@ -20,34 +25,73 @@ import { ChunkResponseDto } from "./dto/chunk-response.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 
+import { PrismaService } from "../prisma/prisma.service";
+import { BadRequestException } from "@nestjs/common";
+
 @UseGuards(JwtAuthGuard)
 @Controller("documents")
 export class DocumentsController {
-  constructor(private documentsService: DocumentsService) {}
+  constructor(
+    private documentsService: DocumentsService,
+    private prisma: PrismaService,
+  ) {}
 
   @Post("upload")
   @UseInterceptors(FileInterceptor("file"))
   async uploadFile(
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          // 20MB file size limit
-          new MaxFileSizeValidator({
-            maxSize: 20 * 1024 * 1024,
-            message: "File size exceeds maximum limit of 20MB",
-          }),
-          // MIME types for PDF, DOCX, PPTX, TXT, PNG, JPG, JPEG
-          new FileTypeValidator({
-            fileType:
-              "^(image/(jpeg|png)|application/pdf|text/plain|application/vnd.openxmlformats-officedocument.wordprocessingml.document|application/vnd.openxmlformats-officedocument.presentationml.presentation)$",
-          }),
-        ],
-      }),
-    )
-    file: Express.Multer.File,
-    @Body() body: UploadDocumentDto,
     @CurrentUser("id") userId: string,
+    @Body() body: UploadDocumentDto,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
+    // If we have a URL but no file, process as URL link document
+    if (body.url && !file) {
+      // Create mock buffer file descriptor for URL
+      const mockFile: Express.Multer.File = {
+        fieldname: "file",
+        originalname: body.url,
+        encoding: "7bit",
+        mimetype: "text/html",
+        size: 0,
+        buffer: Buffer.from(""),
+        stream: null as any,
+        destination: "",
+        filename: "",
+        path: "",
+      };
+      
+      const document = await this.documentsService.upload(
+        mockFile,
+        userId,
+        body.title || "Webpage",
+      );
+      
+      // Update key to the URL so worker or pipeline service downloads/scrapes the URL
+      await this.prisma.document.update({
+        where: { id: document.id },
+        data: {
+          storageKey: body.url,
+          mimeType: body.url.includes("youtube.com") || body.url.includes("youtu.be")
+            ? "video/youtube"
+            : "text/html",
+        },
+      });
+
+      // Fetch updated document details to return
+      const updatedDoc = await this.prisma.document.findUnique({
+        where: { id: document.id },
+      });
+      return DocumentResponseDto.fromEntity(updatedDoc!);
+    }
+
+    if (!file) {
+      throw new BadRequestException("No file or URL provided");
+    }
+
+    // Apply manual checks for file uploads since we bypassed default validation pipeline for URL compatibility
+    if (file.size > 20 * 1024 * 1024) {
+      throw new BadRequestException("File size exceeds maximum limit of 20MB");
+    }
+
     const document = await this.documentsService.upload(
       file,
       userId,
@@ -73,9 +117,78 @@ export class DocumentsController {
     return this.documentsService.delete(id, userId);
   }
 
-  @Get(":id/status")
-  async getStatus(@Param("id") id: string, @CurrentUser("id") userId: string) {
-    return this.documentsService.findStatus(id, userId);
+  @Sse(":id/status")
+  async getStatus(
+    @Param("id") id: string,
+    @CurrentUser("id") userId: string,
+  ): Promise<Observable<MessageEvent>> {
+    // Verify user owns the document first
+    await this.documentsService.findOne(id, userId);
+
+    return new Observable<MessageEvent>((subscriber) => {
+      // 1. Instantly fetch and emit current state from DB
+      this.documentsService
+        .findStatus(id, userId)
+        .then((curr) => {
+          subscriber.next({
+            data: {
+              documentId: id,
+              status: curr.status,
+              chunkCount: curr.chunkCount,
+              errorMessage: curr.errorMessage,
+            },
+          } as MessageEvent);
+          
+          // If status is final (READY or FAILED), we can stop SSE immediately
+          if (curr.status === "READY" || curr.status === "FAILED") {
+            subscriber.complete();
+          }
+        })
+        .catch((err) => subscriber.error(err));
+
+      // 2. Setup Redis pub/sub subscriber client for real-time updates
+      // Create dedicated duplicate connection because subscriber blocks the client
+      const configService = new ConfigService();
+      const subClient = new Redis({
+        host: configService.get<string>("REDIS_HOST", "localhost"),
+        port: Number(configService.get<number>("REDIS_PORT", 6379)),
+        password: configService.get<string>("REDIS_PASSWORD", "") || undefined,
+      });
+
+      subClient.subscribe("document:status_changed").catch((err) => {
+        subscriber.error(err);
+      });
+
+      subClient.on("message", (channel, message) => {
+        if (channel === "document:status_changed") {
+          try {
+            const data = JSON.parse(message);
+            if (data.documentId === id) {
+              subscriber.next({
+                data: {
+                  documentId: id,
+                  status: data.status,
+                  chunkCount: data.chunkCount,
+                  errorMessage: data.errorMessage,
+                },
+              } as MessageEvent);
+
+              // Complete SSE connection on final status
+              if (data.status === "READY" || data.status === "FAILED") {
+                subscriber.complete();
+              }
+            }
+          } catch (e) {
+            // parse error
+          }
+        }
+      });
+
+      // Cleanup subscription on close
+      return () => {
+        subClient.disconnect();
+      };
+    });
   }
 
   @Get(":id/chunks")

@@ -21,10 +21,10 @@ enum SubscriptionPlan {
 }
 
 enum DocumentStatus {
-  UPLOADED
-  PROCESSING
-  READY
-  FAILED
+  PENDING     // Metadata saved, not yet in Minio
+  PROCESSING  // Worker is chunking / embedding
+  READY       // Fully processed and searchable
+  FAILED      // Processing failed (see errorMessage)
 }
 
 enum MessageRole {
@@ -57,6 +57,10 @@ model User {
   usageRecords         UsageRecord[]
   invoices             Invoice[]
   subscriptions        Subscription[] @relation("UserSubscriptions")
+  userProgress         UserProgress[]
+  streaks              Streak[]
+  userBadges           UserBadge[]
+  deviceTokens         DeviceToken[]
 
   @@map("users")
 }
@@ -78,26 +82,34 @@ model Session {
 model Document {
   id                    String          @id @default(uuid())
   userId                String
+  orgId                 String?
+
+  // Human-readable metadata
   title                 String
   originalName          String
   fileType              String
+
+  // Storage
+  storageKey            String          // orgs/{orgId}/docs/{docId}/{filename}
   mimeType              String
-  fileSize              Int
-  fileUrl               String
-  storageKey            String
-  status                DocumentStatus  @default(UPLOADED)
-  pageCount             Int
+  sizeBytes             Int             // canonical size field (replaces fileSize)
+  fileUrl               String          // public/presigned URL at upload time
+
+  // Processing lifecycle
+  status                DocumentStatus  @default(PENDING)
+  errorMessage          String?         // populated on FAILED
+  chunkCount            Int             @default(0) // updated by worker
+  pageCount             Int             @default(0)
+
   extractedTextLength   Int?
   processingStartedAt   DateTime?
   processingCompletedAt DateTime?
-  processingError       String?
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
-  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chunks                DocumentChunk[]
 
-  orgId        String?
-  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization          Organization?   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  chunks                DocumentChunk[]
 
   @@map("documents")
 }
@@ -569,6 +581,7 @@ model Organization {
   learningMetrics   LearningMetric[]
   aiTasks           AiTask[]
   aiSchedules       AiSchedule[]
+  userProgress      UserProgress[]
 
   @@map("organizations")
 }
@@ -643,6 +656,17 @@ model StripeEvent {
   payload     Json // raw Stripe event object
 
   @@map("stripe_events")
+}
+
+model GamificationIdempotency {
+  key         String   @id
+  userId      String
+  orgId       String?
+  action      String
+  xpAwarded   Int
+  createdAt   DateTime @default(now())
+
+  @@map("gamification_idempotency_log")
 }
 
 model UsageRecord {
@@ -1151,3 +1175,90 @@ model AiSchedule {
 
   @@map("ai_schedules")
 }
+
+enum BadgeTriggerType {
+  ACTION
+  MILESTONE
+  STREAK
+}
+
+model UserProgress {
+  id        String   @id @default(uuid())
+  userId    String
+  orgId     String   @default("personal")
+  totalXP   Int      @default(0)
+  level     Int      @default(1)
+  weeklyXP  Int      @default(0)
+  monthlyXP Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+  @@map("user_progress")
+}
+
+model Streak {
+  id                 String    @id @default(uuid())
+  userId             String    @unique
+  currentStreak      Int       @default(0)
+  longestStreak      Int       @default(0)
+  lastActivityDate   DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("streaks")
+}
+
+model Badge {
+  id           String           @id @default(uuid())
+  name         String           @unique
+  description  String
+  icon         String
+  triggerType  BadgeTriggerType
+  triggerValue Int
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  userBadges   UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id        String   @id @default(uuid())
+  userId    String
+  badgeId   String
+  earnedAt  DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+enum Platform {
+  IOS
+  ANDROID
+}
+
+model DeviceToken {
+  id               String   @id @default(uuid())
+  userId           String
+  deviceId         String   @unique
+  platform         Platform
+  fcmToken         String?
+  refreshTokenHash String?
+  expiresAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("device_tokens")
+}
+
