@@ -11,6 +11,7 @@ export class StreakService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue("badge-check") private readonly badgeQueue: Queue,
+    @InjectQueue("push-notifications") private readonly pushQueue: Queue,
   ) {}
 
   /**
@@ -128,6 +129,80 @@ export class StreakService {
       this.logger.log(`Streak reset job complete. Reset ${expired.count} streaks to 0.`);
     } catch (err: any) {
       this.logger.error(`Failed to execute streak reset cron: ${err.message}`);
+    }
+  }
+
+  /**
+   * Cron job running hourly to check and dispatch streak reminders at 8 PM (20:00) 
+   * in each user's local timezone (approximated here by checking UTC offsets or system time).
+   * Since this is a lightweight backend, we run every hour to check user timezone offsets,
+   * or target users whose current local hour is 20 (8pm).
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async sendStreakReminders() {
+    this.logger.log("Hourly Cron: checking for streak reminders at 8pm local time...");
+
+    try {
+      const today = new Date();
+      const currentUtcHour = today.getUTCHours();
+
+      // Find all users who haven't completed activity today
+      const activeStreaks = await this.prisma.streak.findMany({
+        where: {
+          currentStreak: { gt: 0 },
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              timezone: true, // User timezone (defaulting to e.g. "UTC" or offset hours)
+            },
+          },
+        },
+      });
+
+      for (const streak of activeStreaks) {
+        // Resolve timezone offset. If user.timezone is not defined, default to UTC.
+        // We'll target users whose local hour matches 20:00 (8pm).
+        const timezone = streak.user.timezone || "UTC";
+        
+        let localHour = currentUtcHour;
+        try {
+          const formatter = new Intl.DateTimeFormat("en-US", {
+            timeZone: timezone,
+            hour: "numeric",
+            hour12: false,
+          });
+          localHour = parseInt(formatter.format(today), 10);
+        } catch {
+          // fallback to UTC
+        }
+
+        if (localHour === 20) {
+          // If already studied today, skip
+          if (streak.lastActivityDate) {
+            const lastAct = new Date(streak.lastActivityDate);
+            lastAct.setUTCHours(0, 0, 0, 0);
+            const todayUtc = new Date();
+            todayUtc.setUTCHours(0, 0, 0, 0);
+            if (lastAct.getTime() === todayUtc.getTime()) {
+              continue;
+            }
+          }
+
+          // Queue push reminder
+          await this.pushQueue.add("send-push", {
+            userId: streak.userId,
+            type: "STREAK_REMINDER",
+            payload: {
+              title: "Keep your streak alive! 🔥",
+              body: `You are on a ${streak.currentStreak} day study streak. Keep it up today!`,
+            },
+          }).catch((err) => this.logger.error(`Failed to queue streak push: ${err.message}`));
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(`Failed to execute streak reminder job: ${err.message}`);
     }
   }
 }

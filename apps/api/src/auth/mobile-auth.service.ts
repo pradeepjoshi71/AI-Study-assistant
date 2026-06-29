@@ -7,9 +7,9 @@ import {
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import * as bcrypt from "bcrypt";
-import { PrismaService } from "../../prisma/prisma.service";
-import { UsersService } from "../../users/users.service";
-import { RedisService } from "../../redis/redis.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { UsersService } from "../users/users.service";
+import { RedisService } from "../redis/redis.service";
 import { MobileLoginDto, MobileRefreshDto } from "./dtos/mobile-auth.dto";
 
 @Injectable()

@@ -21,6 +21,7 @@ export class XPService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue("badge-check") private readonly badgeQueue: Queue,
+    @InjectQueue("push-notifications") private readonly pushQueue: Queue,
     private readonly streakService: StreakService,
     private readonly leaderboardService: LeaderboardService,
   ) {}
@@ -131,8 +132,20 @@ export class XPService {
         triggerValue: calculatedLevel, // Pass calculated level or triggers
       });
       this.logger.log(`Dispatched badge check job for user: ${userId}`);
+
+      // If user levelled up, queue a push notification
+      if (calculatedLevel > progress.level) {
+        await this.pushQueue.add("send-push", {
+          userId,
+          type: "BADGE_AWARD",
+          payload: {
+            title: "Level Up! 🌟",
+            body: `Congratulations! You've reached Level ${calculatedLevel}.`,
+          },
+        });
+      }
     } catch (err: any) {
-      this.logger.error(`Failed to dispatch badge-check job: ${err.message}`);
+      this.logger.error(`Failed to dispatch badge-check job / push: ${err.message}`);
     }
 
     return {

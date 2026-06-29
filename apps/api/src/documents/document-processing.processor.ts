@@ -8,6 +8,9 @@ import { DocumentStatus } from "@prisma/client";
 import { RedisService } from "../redis/redis.service";
 import { XPService } from "../gamification/xp.service";
 
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
+
 @Processor("document-processing")
 export class DocumentProcessingProcessor extends WorkerHost {
   private readonly logger = new Logger(DocumentProcessingProcessor.name);
@@ -17,6 +20,7 @@ export class DocumentProcessingProcessor extends WorkerHost {
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
     private readonly xpService: XPService,
+    @InjectQueue("push-notifications") private readonly pushQueue: Queue,
   ) {
     super();
   }
@@ -140,6 +144,20 @@ export class DocumentProcessingProcessor extends WorkerHost {
         );
       } catch (xpErr: any) {
         this.logger.error(`Failed to award upload XP: ${xpErr.message}`);
+      }
+
+      // Queue push-notification
+      try {
+        await this.pushQueue.add("send-push", {
+          userId: doc.userId,
+          type: "DOC_STATUS",
+          payload: {
+            title: "Document Ingested! 📚",
+            body: `Your document "${doc.title}" is ready for chat, quizzes, and reviews.`,
+          },
+        });
+      } catch (pushErr: any) {
+        this.logger.error(`Failed to queue push notification: ${pushErr.message}`);
       }
 
       this.logger.log(`Document ${documentId} processed successfully. Chunks: ${chunks.length}`);

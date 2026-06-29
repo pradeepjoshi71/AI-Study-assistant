@@ -14,9 +14,10 @@ import { RedisModule } from "../redis/redis.module";
   imports: [
     PrismaModule,
     RedisModule,
-    BullModule.registerQueue({
-      name: "badge-check",
-    }),
+    BullModule.registerQueue(
+      { name: "badge-check" },
+      { name: "push-notifications" }
+    ),
   ],
   controllers: [LeaderboardController, ProgressController],
   providers: [XPService, StreakService, LeaderboardService, GamificationEventsListener],

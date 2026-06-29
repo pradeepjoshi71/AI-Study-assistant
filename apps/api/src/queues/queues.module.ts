@@ -9,6 +9,8 @@ import { GraphBuildingProcessor } from './graph-building.processor';
 import { AnalyticsAggregationProcessor } from './analytics-aggregation.processor';
 import { MemorySummarizationProcessor } from './memory-summarization.processor';
 import { CostAggregationProcessor } from './cost-aggregation.processor';
+import { PushNotificationProcessor } from './push-notification.processor';
+import { PushService } from '../platform/push.service';
 
 const QUEUE_NAMES = [
   'document-processing',
@@ -19,6 +21,7 @@ const QUEUE_NAMES = [
   'cost-aggregation',
   'org-notifications',
   'badge-check',
+  'push-notifications',
 ];
 
 @Module({
@@ -53,6 +56,8 @@ const QUEUE_NAMES = [
     AnalyticsAggregationProcessor,
     MemorySummarizationProcessor,
     CostAggregationProcessor,
+    PushNotificationProcessor,
+    PushService,
   ],
   exports: [BullModule],
 })

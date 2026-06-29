@@ -1,8 +1,11 @@
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe } from "@nestjs/common";
+import { ValidationPipe, VersioningType } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AppModule } from "./app.module";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
+import { MobileInterceptor } from "./common/interceptors/mobile.interceptor";
+import { FieldFilterInterceptor } from "./common/interceptors/field-filter.interceptor";
+import { CacheHeadersInterceptor } from "./common/interceptors/cache-headers.interceptor";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { userContextStorage } from "./common/context/user-context";
 
@@ -47,6 +50,10 @@ async function bootstrap() {
   app.use(express.urlencoded({ extended: true }));
 
   app.setGlobalPrefix(prefix);
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: "1",
+  });
   app.enableCors();
 
   app.useGlobalPipes(
@@ -56,7 +63,12 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalInterceptors(new TransformInterceptor());
+  app.useGlobalInterceptors(
+    new TransformInterceptor(),
+    new MobileInterceptor(),
+    new FieldFilterInterceptor(),
+    new CacheHeadersInterceptor()
+  );
   app.useGlobalFilters(new HttpExceptionFilter());
 
   await app.listen(port);

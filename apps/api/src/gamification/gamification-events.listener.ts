@@ -2,11 +2,17 @@ import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { XPService } from "./xp.service";
 
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
+
 @Injectable()
 export class GamificationEventsListener {
   private readonly logger = new Logger(GamificationEventsListener.name);
 
-  constructor(private readonly xpService: XPService) {}
+  constructor(
+    private readonly xpService: XPService,
+    @InjectQueue("push-notifications") private readonly pushQueue: Queue,
+  ) {}
 
   @OnEvent("quiz.completed")
   async handleQuizCompleted(payload: { userId: string; orgId: string | null; attemptId: string }) {
@@ -17,6 +23,16 @@ export class GamificationEventsListener {
       "QUIZ_COMPLETION",
       `xp:quiz_completed:${payload.attemptId}`
     );
+
+    // Queue push-notification
+    await this.pushQueue.add("send-push", {
+      userId: payload.userId,
+      type: "QUIZ_COMPLETE",
+      payload: {
+        title: "Quiz Completed! 🎉",
+        body: "Check your progress and review the master topics now.",
+      },
+    }).catch((err) => this.logger.error(`Failed to queue push: ${err.message}`));
   }
 
   @OnEvent("flashcard.reviewed")
