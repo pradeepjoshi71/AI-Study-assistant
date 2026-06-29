@@ -45,6 +45,10 @@ from app.api.knowledge_graph import router as knowledge_graph_router
 from app.api.pipeline import router as pipeline_router
 from app.api.chunk_embed import router as chunk_embed_router
 from app.api.upsert import router as upsert_router
+from app.api.voice import router as voice_router
+from app.api.voice_websocket import router as voice_websocket_router
+from app.api.adaptive import router as adaptive_router
+from app.api.recommender import router as recommender_router
 app.include_router(chat_stream_router, prefix="/ai")
 app.include_router(memory_summarizer_router, prefix="/ai")
 app.include_router(synthesis_engine_router, prefix="/ai")
@@ -55,6 +59,10 @@ app.include_router(knowledge_graph_router, prefix="/ai")
 app.include_router(pipeline_router, prefix="/ai")
 app.include_router(chunk_embed_router, prefix="/ai")
 app.include_router(upsert_router, prefix="/ai")
+app.include_router(voice_router, prefix="/ai")
+app.include_router(voice_websocket_router, prefix="/ai")
+app.include_router(adaptive_router, prefix="/ai")
+app.include_router(recommender_router, prefix="/ai")
 
 @app.on_event("startup")
 async def startup_event():
@@ -94,6 +102,14 @@ async def startup_event():
         logger.info("CLIP model startup pre-load complete.")
     except Exception as e:
         logger.warning(f"CLIP pre-load failed (non-fatal): {e}")
+
+    # Pre-load faster-whisper speech model to amortise first-request latency
+    try:
+        from app.services.voice_service import load_whisper_model
+        load_whisper_model()
+        logger.info("faster-whisper medium model startup pre-load complete.")
+    except Exception as e:
+        logger.warning(f"faster-whisper model pre-load failed (non-fatal): {e}")
 
 # Database setup for API handlers
 import os

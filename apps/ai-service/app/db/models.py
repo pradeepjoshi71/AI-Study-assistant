@@ -287,5 +287,25 @@ class ChunkConceptMap(Base):
     createdAt = Column(DateTime, default=datetime.utcnow)
 
 
+class VoiceSession(Base):
+    """
+    Voice session model storing state, STT text, and TTS output keys.
+    Maps to 'voice_sessions' table.
+    """
+    __tablename__ = "voice_sessions"
+
+    id = Column(String, primary_key=True)
+    userId = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    orgId = Column(String, nullable=True)
+    sessionId = Column(String, unique=True, nullable=False)
+    status = Column(String, default="PENDING")   # PENDING | STT | RAG | TTS | READY | FAILED | PURGED
+    sttText = Column(Text, nullable=True)
+    ttsAudioKey = Column(Text, nullable=True)
+    durationMs = Column(Integer, nullable=True)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
 
 

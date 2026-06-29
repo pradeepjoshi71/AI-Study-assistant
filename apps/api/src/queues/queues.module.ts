@@ -5,12 +5,21 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { CommonModule } from '../common/common.module';
 import { KnowledgeGraphModule } from '../modules/knowledge-graph/knowledge-graph.module';
 import { MemoryModule } from '../modules/memory/memory.module';
+import { AuthModule } from '../auth/auth.module';
+import { StorageModule } from '../storage/storage.module';
+import { ChatModule } from '../chat/chat.module';
+import { FlashcardModule } from '../modules/flashcards/flashcards.module';
+import { QuizModule } from '../modules/quiz/quiz.module';
 import { GraphBuildingProcessor } from './graph-building.processor';
 import { AnalyticsAggregationProcessor } from './analytics-aggregation.processor';
 import { MemorySummarizationProcessor } from './memory-summarization.processor';
 import { CostAggregationProcessor } from './cost-aggregation.processor';
 import { PushNotificationProcessor } from './push-notification.processor';
 import { PushService } from '../platform/push.service';
+import { VoiceCleanupProcessor } from './voice-cleanup.processor';
+import { VoiceProcessingProcessor } from './voice-processing.processor';
+import { AdaptiveMasteryProcessor } from './adaptive-mastery.processor';
+import { AdaptiveContentProcessor } from './adaptive-content.processor';
 
 const QUEUE_NAMES = [
   'document-processing',
@@ -22,6 +31,9 @@ const QUEUE_NAMES = [
   'org-notifications',
   'badge-check',
   'push-notifications',
+  'voice-cleanup',
+  'voice-processing',
+  'adaptive-mastery',
 ];
 
 @Module({
@@ -31,6 +43,11 @@ const QUEUE_NAMES = [
     KnowledgeGraphModule,
     MemoryModule,
     ConfigModule,
+    AuthModule,
+    StorageModule,
+    ChatModule,
+    FlashcardModule,
+    QuizModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -58,6 +75,10 @@ const QUEUE_NAMES = [
     CostAggregationProcessor,
     PushNotificationProcessor,
     PushService,
+    VoiceCleanupProcessor,
+    VoiceProcessingProcessor,
+    AdaptiveMasteryProcessor,
+    AdaptiveContentProcessor,
   ],
   exports: [BullModule],
 })

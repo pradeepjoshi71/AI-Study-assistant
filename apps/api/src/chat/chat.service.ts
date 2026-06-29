@@ -366,7 +366,7 @@ export class ChatService {
     }
   }
 
-  private async streamFromAiService(
+  public async streamFromAiService(
     systemPrompt: string,
     message: string,
     history: Array<{ role: string; content: string }>,

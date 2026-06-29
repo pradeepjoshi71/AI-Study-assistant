@@ -2,6 +2,8 @@ import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenEx
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MultiDocRetrievalService } from '../retrieval/multi-doc.retrieval';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { GenerateFlashcardsDto, SubmitFlashcardReviewDto } from './flashcards.types';
 import { MessageRole } from '@prisma/client';
 import { AnalyticsService } from '../analytics/analytics.service';
@@ -16,6 +18,7 @@ export class FlashcardService {
     private multiDocRetrievalService: MultiDocRetrievalService,
     private configService: ConfigService,
     private analyticsService: AnalyticsService,
+    @InjectQueue('adaptive-mastery') private readonly masteryQueue: Queue,
   ) {
     this.aiServiceUrl = this.configService.get<string>(
       'NEXT_PUBLIC_AI_SERVICE_URL',
@@ -197,9 +200,108 @@ export class FlashcardService {
       throw new ForbiddenException('Tenant access denied');
     }
 
-    return this.analyticsService.logFlashcardReview(userId, tenantId, {
+    const result = await this.analyticsService.logFlashcardReview(userId, tenantId, {
       flashcardId,
       recallStatus: dto.recallStatus,
+    });
+
+    // Spaced Repetition (SR) SM-2 algorithm update
+    // If client does not send score, map from recallStatus: easy=5, hard=3, fail=0
+    let sm2Score = dto.score ?? 3;
+    if (dto.score === undefined) {
+      if (dto.recallStatus === "easy") sm2Score = 5;
+      else if (dto.recallStatus === "fail") sm2Score = 0;
+    }
+
+    let easeFactor = card.easeFactor;
+    let interval = card.interval;
+
+    if (sm2Score < 3) {
+      interval = 1;
+    } else {
+      if (interval === 1) {
+        interval = 6;
+      } else {
+        interval = Math.round(interval * easeFactor);
+      }
+      
+      // easeFactor calculation formula:
+      // EF' = EF + (0.1 - (5 - score) * (0.08 + (5 - score) * 0.02))
+      easeFactor = easeFactor + 0.1 - (5 - sm2Score) * (0.08 + (5 - sm2Score) * 0.02);
+      easeFactor = Math.max(1.3, easeFactor); // Cap easeFactor min 1.3
+    }
+
+    const nextReviewDate = new Date();
+    nextReviewDate.setDate(nextReviewDate.getDate() + interval);
+
+    // Save SM-2 progress metrics back to PostgreSQL
+    await this.prisma.flashcard.update({
+      where: { id: flashcardId },
+      data: {
+        easeFactor,
+        interval,
+        nextReviewDate,
+      },
+    });
+
+    // Schedule BullMQ delayed job at nextReviewDate to add card back to user review queue
+    try {
+      const delayMs = Math.max(0, nextReviewDate.getTime() - Date.now());
+      // Re-use current masteryQueue connection details to schedule review task
+      const { Queue } = require("bullmq");
+      const client = this.masteryQueue.client;
+      const reviewQueue = new Queue("badge-check", { connection: this.masteryQueue.opts.connection });
+      await reviewQueue.add("flashcard-review-due", { userId, flashcardId }, { delay: delayMs });
+      this.logger.log(`Scheduled card review job for card ${flashcardId} (delay: ${Math.round(delayMs / 1000)}s)`);
+      await reviewQueue.close();
+    } catch (wsErr: any) {
+      this.logger.warn(`Failed to schedule card review job: ${wsErr.message}`);
+    }
+
+    // Determine performance score from review recall rating: easy=100%, hard=50%, fail=0%
+    let score = 0;
+    if (dto.recallStatus === "easy") score = 100;
+    else if (dto.recallStatus === "hard") score = 50;
+
+    // Resolve previous attempt count to update attemptNumber sequence
+    const attemptsCount = await this.prisma.flashcardReview.count({
+      where: { userId, flashcardId },
+    });
+
+    // Enqueue background mastery and analytics updater
+    await this.masteryQueue.add("process-performance-mastery", {
+      userId,
+      orgId: card.deck.orgId || null,
+      itemId: flashcardId,
+      itemType: "FLASHCARD",
+      score,
+      timeTakenMs: 0,
+      attemptNumber: attemptsCount || 1,
+      difficulty: 1.0, // Default base card difficulty
+    }).catch(err => {
+      this.logger.warn(`Failed to dispatch adaptive-mastery queue job: ${err.message}`);
+    });
+
+    return result;
+  }
+
+  /**
+   * Returns flashcard reviews due today (nextReviewDate <= now) up to a max limit of 20 items.
+   */
+  async getReviewQueue(userId: string) {
+    return this.prisma.flashcard.findMany({
+      where: {
+        deck: {
+          userId,
+        },
+        nextReviewDate: {
+          lte: new Date(),
+        },
+      },
+      take: 20,
+      orderBy: {
+        nextReviewDate: "asc",
+      },
     });
   }
 }

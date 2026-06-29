@@ -2,6 +2,8 @@ import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenEx
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MultiDocRetrievalService } from '../retrieval/multi-doc.retrieval';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { GenerateQuizDto, SubmitQuizDto } from './quiz.types';
 import { MessageRole } from '@prisma/client';
 import { AnalyticsService } from '../analytics/analytics.service';
@@ -17,6 +19,7 @@ export class QuizService {
     private multiDocRetrievalService: MultiDocRetrievalService,
     private configService: ConfigService,
     private analyticsService: AnalyticsService,
+    @InjectQueue('adaptive-mastery') private readonly masteryQueue: Queue,
   ) {
     this.aiServiceUrl = this.configService.get<string>(
       'NEXT_PUBLIC_AI_SERVICE_URL',
@@ -211,10 +214,34 @@ export class QuizService {
       throw new ForbiddenException('Tenant access denied');
     }
 
-    return this.analyticsService.logQuizAttempt(userId, tenantId, {
+    const result = await this.analyticsService.logQuizAttempt(userId, tenantId, {
       quizId,
       correctAnswers: dto.correctAnswers,
       wrongAnswers: dto.wrongAnswers,
     });
+
+    // Dispatch BullMQ background task to calculate Mastery & write PerformanceRecord
+    const total = dto.correctAnswers + dto.wrongAnswers;
+    const score = total > 0 ? (dto.correctAnswers / total) * 100 : 0;
+    
+    // Resolve previous attempt count to update attemptNumber sequence
+    const attemptsCount = await this.prisma.quizAttempt.count({
+      where: { userId, quizId },
+    });
+
+    await this.masteryQueue.add("process-performance-mastery", {
+      userId,
+      orgId: orgId || null,
+      itemId: quizId,
+      itemType: "QUIZ",
+      score,
+      timeTakenMs: 0, // default timeTaken if not tracking timer
+      attemptNumber: attemptsCount || 1,
+      difficulty: quiz.difficulty ? parseFloat(quiz.difficulty) : 1.0,
+    }).catch(err => {
+      this.logger.warn(`Failed to dispatch adaptive-mastery queue job: ${err.message}`);
+    });
+
+    return result;
   }
 }

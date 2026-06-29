@@ -1,4 +1,4 @@
-import { IsString, IsEnum } from 'class-validator';
+import { IsString, IsEnum, IsOptional } from 'class-validator';
 import { RecallStatus } from '../analytics/analytics.types';
 
 export enum FlashcardMode {
@@ -18,4 +18,8 @@ export class GenerateFlashcardsDto {
 export class SubmitFlashcardReviewDto {
   @IsEnum(RecallStatus)
   recallStatus!: RecallStatus;
+
+  @IsOptional()
+  score?: number;
 }
+

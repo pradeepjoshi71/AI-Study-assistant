@@ -41,6 +41,14 @@ export class MobileGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
+   * Broadcasts real-time voice pipeline progression events directly to the sessionId room.
+   */
+  sendVoiceEvent(sessionId: string, event: string, payload: any) {
+    this.logger.debug(`Broadcasting voice event ${event} to room ${sessionId}`);
+    this.server.to(sessionId).emit(event, payload);
+  }
+
+  /**
    * Handles new gateway connections.
    * Authenticates JWT token passed via handshake query params.
    * Saves Socket ID to User ID mapping in Redis.
@@ -67,6 +75,13 @@ export class MobileGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await redis.set(`socket:${socket.id}:user`, userId, "EX", 3600); // 1h expiry TTL
       this.logger.log(`WS Client connected: socket ${socket.id} (user: ${userId})`);
 
+      // Automatically join sessionId room if passed in handshake query
+      const sessionId = socket.handshake.query.sessionId as string;
+      if (sessionId) {
+        socket.join(sessionId);
+        this.logger.log(`Socket ${socket.id} automatically joined room: ${sessionId}`);
+      }
+
       // If reconnecting with a lastMessageId, replay buffered chunks from Redis stream/list if cached
       if (lastMessageId) {
         this.logger.log(`Client reconnecting. Replaying stream for message: ${lastMessageId}`);
@@ -84,6 +99,19 @@ export class MobileGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (err: any) {
       this.logger.error(`WS Authentication failure: ${err.message}`);
       socket.disconnect();
+    }
+  }
+
+  @SubscribeMessage("voice:join")
+  handleVoiceJoin(
+    @MessageBody() payload: { sessionId: string },
+    @ConnectedSocket() socket: Socket,
+  ) {
+    const { sessionId } = payload;
+    if (sessionId) {
+      socket.join(sessionId);
+      this.logger.log(`Socket ${socket.id} explicitly joined voice session room: ${sessionId}`);
+      return { status: "joined", room: sessionId };
     }
   }
 

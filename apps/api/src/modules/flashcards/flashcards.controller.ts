@@ -42,4 +42,9 @@ export class FlashcardController {
     const tenantId = userId;
     return this.flashcardService.listDecks(userId, tenantId);
   }
+
+  @Get('adaptive/review-queue')
+  async getReviewQueue(@CurrentUser('id') userId: string) {
+    return this.flashcardService.getReviewQueue(userId);
+  }
 }

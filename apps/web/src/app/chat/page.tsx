@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useChatStream, CitationEvent } from "../hooks/useChatStream";
 import { ChatWindow, ChatMessage } from "../components/ChatWindow";
+import { VoiceButton } from "../components/VoiceButton";
 
 interface DocumentInfo {
   id: string;
@@ -596,6 +597,47 @@ export default function ChatPage() {
                 transition: "all 0.2s",
               }}
             />
+
+            {/* Voice hold-to-talk button and config widget */}
+            <VoiceButton
+              token={token}
+              selectedDocIds={selectedDocIds}
+              activeConvId={activeConvId}
+              onTranscriptReceived={(text) => {
+                // Optimistically add user text bubbles
+                const userMsg: ChatMessage = {
+                  id: Math.random().toString(),
+                  role: "USER",
+                  content: `[Voice Input] ${text}`,
+                };
+                setMessages((prev) => [...prev, userMsg]);
+              }}
+              onCitationsReceived={(cites) => {
+                if (cites && cites.length > 0) {
+                  // Push final citations to the latest message bubble if available
+                  setMessages((prev) => {
+                    const next = [...prev];
+                    const lastIdx = next.length - 1;
+                    if (lastIdx >= 0) {
+                      next[lastIdx] = {
+                        ...next[lastIdx],
+                        citations: cites.map(c => ({
+                          chunk_id: c.chunkId || c.chunk_id,
+                          document_id: c.documentId || c.document_id,
+                          page: c.page || c.pageNumber || 1,
+                          text_preview: c.text_preview || c.text || "",
+                          type: c.type || "TEXT",
+                          imageUrl: c.imageUrl,
+                          caption: c.caption
+                        }))
+                      };
+                    }
+                    return next;
+                  });
+                }
+              }}
+            />
+
             <button
               type="submit"
               disabled={isStreaming}

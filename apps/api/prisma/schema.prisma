@@ -63,6 +63,10 @@ model User {
   userBadges           UserBadge[]
   deviceTokens         DeviceToken[]
   notificationPreferences NotificationPreference[]
+  voiceSessions        VoiceSession[]
+  performanceRecords   PerformanceRecord[]
+  userMasteries        UserMastery[]
+  adaptiveSessions     AdaptiveSession[]
 
   @@map("users")
 }
@@ -235,19 +239,25 @@ model FlashcardDeck {
   createdAt      DateTime    @default(now())
   flashcards     Flashcard[]
 
+  orgId        String?
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
   @@map("flashcard_decks")
 }
 
 model Flashcard {
-  id            String            @id @default(uuid())
-  deckId        String
-  front         String            @db.Text
-  back          String            @db.Text
-  chunkIdSource String
-  tags          Json? // tag words: e.g. ["topic", "difficulty"]
-  createdAt     DateTime          @default(now()) @db.Timestamp(3)
-  deck          FlashcardDeck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
-  reviews       FlashcardReview[]
+  id             String            @id @default(uuid())
+  deckId         String
+  front          String            @db.Text
+  back           String            @db.Text
+  chunkIdSource  String
+  tags           Json? // tag words: e.g. ["topic", "difficulty"]
+  easeFactor     Float             @default(2.5)
+  interval       Int               @default(1)
+  nextReviewDate DateTime          @default(now())
+  createdAt      DateTime          @default(now()) @db.Timestamp(3)
+  deck           FlashcardDeck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  reviews        FlashcardReview[]
 
   @@map("flashcards")
 }
@@ -610,6 +620,7 @@ model Organization {
   aiTasks           AiTask[]
   aiSchedules       AiSchedule[]
   userProgress      UserProgress[]
+  flashcardDecks    FlashcardDeck[]
 
   @@map("organizations")
 }
@@ -1303,4 +1314,115 @@ model NotificationPreference {
   @@unique([userId, type])
   @@map("notification_preferences")
 }
+
+model VoiceSession {
+  id           String             @id @default(uuid())
+  userId       String
+  orgId        String?
+  sessionId    String             @unique
+  status       VoiceSessionStatus @default(PENDING)
+  sttText      String?            @db.Text
+  ttsAudioKey  String?            @db.Text
+  durationMs   Int?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("voice_sessions")
+}
+
+enum VoiceSessionStatus {
+  PENDING
+  STT
+  RAG
+  TTS
+  READY
+  FAILED
+  PURGED
+}
+
+model PerformanceRecord {
+  id            String             @id @default(uuid())
+  userId        String
+  orgId         String?
+  itemId        String
+  itemType      PerformanceItemType
+  score         Float
+  timeTakenMs   Int
+  attemptNumber Int
+  difficulty    Float
+  createdAt     DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("performance_records")
+}
+
+enum PerformanceItemType {
+  QUIZ
+  FLASHCARD
+}
+
+model UserMastery {
+  id           String   @id @default(uuid())
+  userId       String
+  topicId      String
+  masteryScore Float    // 0-1
+  confidence   Float
+  lastUpdated  DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@map("user_masteries")
+}
+
+model AdaptiveSession {
+  id                String                 @id @default(uuid())
+  userId            String
+  orgId             String?
+  sessionId         String                 @unique
+  currentDifficulty Float
+  targetMastery     Float
+  status            AdaptiveSessionStatus  @default(ACTIVE)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("adaptive_sessions")
+}
+
+enum AdaptiveSessionStatus {
+  ACTIVE
+  PAUSED
+  COMPLETE
+}
+
+model Topic {
+  id            String   @id @default(uuid())
+  name          String
+  docId         String?
+  parentTopicId String?
+
+  parentTopic   Topic?        @relation("TopicHierarchy", fields: [parentTopicId], references: [id], onDelete: Cascade)
+  subTopics     Topic[]       @relation("TopicHierarchy")
+  userMasteries UserMastery[]
+
+  @@map("topics")
+}
+
+model DifficultyConfig {
+  id             String   @id @default(uuid())
+  itemId         String   @unique
+  baseD          Float    // base difficulty parameter
+  discrimination Float    // IRT item discrimination parameter
+  guessing       Float    // IRT item pseudo-guessing parameter
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("difficulty_configs")
+}
+
 

@@ -21,6 +21,7 @@ import { MarketplaceModule } from '../marketplace/marketplace.module';
   ],
   controllers: [ChatController],
   providers: [ChatService],
+  exports: [ChatService],
 })
 export class ChatModule {}
 

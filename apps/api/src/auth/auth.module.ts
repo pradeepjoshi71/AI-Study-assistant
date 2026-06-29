@@ -14,6 +14,7 @@ import { MobileAuthService } from "./mobile-auth.service";
 import { MobileJwtAuthGuard } from "./guards/mobile-jwt.guard";
 import { RedisModule } from "../redis/redis.module";
 import { MobileGateway } from "./mobile.gateway";
+import { VoiceController } from "./voice.controller";
 
 @Module({
   imports: [
@@ -23,8 +24,8 @@ import { MobileGateway } from "./mobile.gateway";
     UsersModule,
     RedisModule,
   ],
-  controllers: [AuthController, MobileAuthController, MobileController],
+  controllers: [AuthController, MobileAuthController, MobileController, VoiceController],
   providers: [AuthService, MobileAuthService, JwtStrategy, JwtAuthGuard, MobileJwtAuthGuard, RolesGuard, MobileGateway],
-  exports: [AuthService, MobileAuthService, JwtAuthGuard, MobileJwtAuthGuard, RolesGuard, PassportModule, JwtModule],
+  exports: [AuthService, MobileAuthService, JwtAuthGuard, MobileJwtAuthGuard, RolesGuard, PassportModule, JwtModule, MobileGateway],
 })
 export class AuthModule {}
