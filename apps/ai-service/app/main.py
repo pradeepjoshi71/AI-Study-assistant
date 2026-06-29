@@ -66,6 +66,35 @@ async def startup_event():
     else:
         logger.info("RUN_BACKGROUND_WORKERS is set to false. Skipping background worker tasks in web server.")
 
+    # Bootstrap Qdrant collections (legacy + v2 named-vector)
+    try:
+        from app.services.qdrant_collections import (
+            get_qdrant_client,
+            ensure_legacy_collection,
+            ensure_v2_collection,
+        )
+        qdrant = get_qdrant_client()
+        ensure_legacy_collection(qdrant)
+        ensure_v2_collection(qdrant)
+    except Exception as e:
+        logger.error(f"Qdrant collection bootstrap failed (non-fatal): {e}")
+
+    # Bootstrap Minio bucket
+    try:
+        from app.services.minio_storage import get_minio_client, ensure_bucket
+        minio = get_minio_client()
+        ensure_bucket(minio)
+    except Exception as e:
+        logger.warning(f"Minio bucket bootstrap failed (non-fatal — likely not configured): {e}")
+
+    # Pre-load CLIP ViT-B/32 to amortise first-request latency
+    try:
+        from app.services.embedding_service import _load_clip
+        _load_clip()
+        logger.info("CLIP model startup pre-load complete.")
+    except Exception as e:
+        logger.warning(f"CLIP pre-load failed (non-fatal): {e}")
+
 # Database setup for API handlers
 import os
 from sqlalchemy import create_engine
@@ -77,6 +106,7 @@ from app.services.reranker import RerankerService
 from app.services.context_builder import ContextBuilderService
 from app.services.llm import LLMOrchestrator
 from app.services.citation_engine import build_citations
+from app.services.multimodal_retriever import MultiModalRAGRetriever
 
 db_url = settings.DATABASE_URL
 if db_url.startswith("postgresql://"):
@@ -90,11 +120,13 @@ vector_search = VectorSearchService()
 reranker = RerankerService()
 context_builder = ContextBuilderService()
 llm_orchestrator = LLMOrchestrator()
+multimodal_retriever = MultiModalRAGRetriever()
 
 class RagSearchRequest(BaseModel):
     userId: str
     query: str
     documentIds: Optional[List[str]] = None
+    orgId: Optional[str] = None   # Required for multimodal v2 retrieval
 
 @app.post("/ai/rag/search")
 def ai_rag_search(req: RagSearchRequest):
@@ -150,6 +182,64 @@ def ai_rag_search(req: RagSearchRequest):
         }
     finally:
         db.close()
+
+
+class MultiModalRagRequest(BaseModel):
+    query: str
+    orgId: Optional[str] = None
+    documentIds: Optional[List[str]] = None
+    topK: Optional[int] = 6
+
+
+@app.post("/ai/rag/search/multimodal")
+def ai_rag_search_multimodal(req: MultiModalRagRequest):
+    """
+    4-step multimodal RAG pipeline against study_chunks_v2.
+
+    Step 1: text_vec search (top 5) with OpenAI text-embedding-3-small.
+    Step 2: image_vec search (top 3) with CLIP ViT-B/32 text→image encoding.
+    Step 3: merge results by chunkId, deduplicate.
+    Step 4: weighted rerank — text_score×0.7 + image_score×0.3 → top 6.
+
+    Falls back to text-only scoring if no image chunks are returned.
+    """
+    import time
+    start_time = time.time()
+    logger.info(
+        f"Multimodal RAG search: query='{req.query}' "
+        f"orgId={req.orgId} docIds={req.documentIds}"
+    )
+
+    try:
+        results = multimodal_retriever.search(
+            query=req.query,
+            org_id=req.orgId,
+            doc_ids=req.documentIds,
+            top_k=req.topK or 6,
+        )
+
+        latency_ms = (time.time() - start_time) * 1000
+        image_count = sum(1 for r in results if r.get("modality") in ("IMAGE", "DIAGRAM"))
+        logger.info(
+            f"Multimodal RAG: {latency_ms:.2f}ms | "
+            f"total={len(results)} image_chunks={image_count}"
+        )
+
+        return {
+            "chunks": results,
+            "chunkCount": len(results),
+            "hasImageResults": image_count > 0,
+            "latencyMs": round(latency_ms, 2),
+        }
+
+    except Exception as exc:
+        logger.error(f"Multimodal RAG search failed: {exc}")
+        return {
+            "chunks": [],
+            "chunkCount": 0,
+            "hasImageResults": False,
+            "error": str(exc),
+        }
 
 class SummarizeRequest(BaseModel):
     messages: List[Dict[str, str]]

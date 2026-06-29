@@ -17,6 +17,7 @@ export interface SendChatDto {
   documentIds?: string[];
   mode: 'study' | 'quiz' | 'flashcard';
   enabledPluginKeys?: string[];
+  storageKey?: string; // Multimodal image attachment key
 }
 
 @Injectable()
@@ -92,9 +93,10 @@ export class ChatService {
 
     // 3. Perform Vector Search & Reranking via Retrieval Service
     const retrievalResult = await this.retrievalService.retrieveContext(
-      userId,
-      dto.message,
-      dto.documentIds,
+       userId,
+       dto.message,
+       dto.documentIds,
+       dto.storageKey,
     );
 
     // 4. Enrich citations with document titles
@@ -151,6 +153,8 @@ export class ChatService {
         res,
         userId,
         geminiTools,
+        dto.storageKey,
+        retrievalResult.chunks,
       );
 
       if (streamResult.toolCall) {
@@ -371,6 +375,8 @@ export class ChatService {
     res: Response,
     userId: string,
     tools?: any[],
+    storageKey?: string,
+    chunks?: any[],
   ): Promise<{ fullText: string; tokenCount: number; toolCall: { name: string; args: any } | null }> {
     try {
       const response = await fetch(`${this.aiServiceUrl}/ai/chat/stream`, {
@@ -384,6 +390,9 @@ export class ChatService {
           message,
           history,
           tools,
+          storageKey,
+          chunks: chunks || [],
+          userPlan: "PAID",
         }),
       });
 

@@ -123,12 +123,38 @@ model DocumentChunk {
   content            String          @db.Text
   tokenCount         Int
   metadata           Json
+  modality           ChunkModality   @default(TEXT)
   embeddingStatus    EmbeddingStatus @default(PENDING)
   embeddingCreatedAt DateTime?
   createdAt          DateTime        @default(now())
   document           Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  images             ChunkImage[]
 
   @@map("document_chunks")
+}
+
+model ChunkImage {
+  id          String        @id @default(uuid())
+  chunkId     String
+  storageKey  String        // Minio path: orgs/{orgId}/docs/{docId}/images/{imageId}.png
+  width       Int?
+  height      Int?
+  pageRef     Int
+  caption     String?       @db.Text
+  imageHash   String?       // SHA256 of image bytes for dedup
+  createdAt   DateTime      @default(now())
+  chunk       DocumentChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@index([chunkId])
+  @@index([imageHash])
+  @@map("chunk_images")
+}
+
+enum ChunkModality {
+  TEXT
+  IMAGE
+  TABLE
+  DIAGRAM
 }
 
 model Conversation {

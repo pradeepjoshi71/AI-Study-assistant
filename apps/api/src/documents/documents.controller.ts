@@ -109,7 +109,29 @@ export class DocumentsController {
   @Get(":id")
   async findOne(@Param("id") id: string, @CurrentUser("id") userId: string) {
     const document = await this.documentsService.findOne(id, userId);
-    return DocumentResponseDto.fromEntity(document);
+    
+    // Compute modality counts for the document processing summary card
+    const chunks = await this.prisma.documentChunk.findMany({
+      where: { documentId: id },
+      include: { _count: { select: { images: true } } },
+    });
+
+    const summary = {
+      textCount: chunks.filter(c => c.modality === "TEXT").length,
+      tableCount: chunks.filter(c => c.modality === "TABLE").length,
+      imageCount: chunks.filter(c => c.modality === "IMAGE").length,
+      diagramCount: chunks.filter(c => c.modality === "DIAGRAM").length,
+    };
+
+    return {
+      ...DocumentResponseDto.fromEntity(document),
+      summary,
+    };
+  }
+
+  @Get(":id/assets")
+  async getAssets(@Param("id") id: string, @CurrentUser("id") userId: string) {
+    return this.documentsService.findAssets(id, userId);
   }
 
   @Delete(":id")
@@ -203,5 +225,17 @@ export class DocumentsController {
     @CurrentUser("id") userId: string,
   ) {
     return this.documentsService.findMetadata(id, userId);
+  }
+
+  @Post("upload-inline-image")
+  @UseInterceptors(FileInterceptor("file"))
+  async uploadInlineImage(
+    @CurrentUser("id") userId: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException("No image file provided");
+    }
+    return this.documentsService.uploadInlineImage(file, userId);
   }
 }

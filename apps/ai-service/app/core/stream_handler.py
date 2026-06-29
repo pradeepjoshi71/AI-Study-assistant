@@ -1,6 +1,8 @@
 import logging
 import json
 import asyncio
+import base64
+import io
 from typing import AsyncGenerator, List, Dict, Any, Optional
 import google.generativeai as genai
 from app.core.config import settings
@@ -39,6 +41,8 @@ class StreamHandler:
         citations: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         timeout_seconds: int = 60,
+        user_plan: Optional[str] = "FREE",
+        chunks: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Generates real-time SSE stream events for RAG Q&A.
@@ -106,7 +110,53 @@ class StreamHandler:
                         pass
                     contents.append({"role": role, "parts": [content_str]})
 
-                contents.append({"role": "user", "parts": [message]})
+                user_parts: List[Any] = [message]
+
+                # Check if we have visual chunks and user plan allows visual prompt analysis
+                # FREE plan users are restricted to text-only prompts (image inputs are skipped/fall back to captions).
+                has_visual_elements = False
+                if chunks and user_plan != "FREE":
+                    # Filter only IMAGE and DIAGRAM modalities
+                    visual_chunks = [
+                        c for c in chunks 
+                        if (c.get("modality") or "").upper() in ("IMAGE", "DIAGRAM")
+                    ]
+                    
+                    if visual_chunks:
+                        # Cap at max 3 images per prompt
+                        target_chunks = visual_chunks[:3]
+                        
+                        # Generate signed URLs and append image blocks to user parts
+                        for vc in target_chunks:
+                            skey = vc.get("storageKey") or vc.get("storage_key")
+                            if skey:
+                                try:
+                                    from app.services.minio_storage import get_presigned_url
+                                    from PIL import Image as PILImage
+                                    import httpx
+                                    
+                                    # Fetch signed download url
+                                    signed_url = get_presigned_url(skey)
+                                    
+                                    # Fetch and process image bytes for Gemini inline data part
+                                    resp = httpx.get(signed_url)
+                                    if resp.status_code == 200:
+                                        img_bytes = resp.content
+                                        # Deduce extension, load as PIL to verify image
+                                        pil_img = PILImage.open(io.BytesIO(img_bytes))
+                                        
+                                        user_parts.append({
+                                            "inline_data": {
+                                                "mime_type": "image/png",
+                                                "data": base64.b64encode(img_bytes).decode("utf-8")
+                                            }
+                                        })
+                                        has_visual_elements = True
+                                        logger.info(f"Successfully appended visual chunk {skey} to user prompt.")
+                                except Exception as img_err:
+                                    logger.error(f"Failed to fetch/append visual chunk image: {img_err}")
+                
+                contents.append({"role": "user", "parts": user_parts})
 
                 formatted_tools = None
                 if tools:

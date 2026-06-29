@@ -43,6 +43,7 @@ class IngestPipelineRequest(BaseModel):
     documentId: str
     storageKey: str
     mimeType: str
+    orgId: Optional[str] = None
 
 class ParsedSegment(BaseModel):
     text: str
@@ -72,7 +73,8 @@ def parse_document_endpoint(req: IngestPipelineRequest):
         results = pipeline_service.parse_document(
             doc_id=req.documentId,
             storage_key=req.storageKey,
-            mime_type=req.mimeType
+            mime_type=req.mimeType,
+            org_id=req.orgId,
         )
         
         segments = [

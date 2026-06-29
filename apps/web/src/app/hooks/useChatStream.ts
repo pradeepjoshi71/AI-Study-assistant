@@ -5,6 +5,9 @@ export interface CitationEvent {
   document_id: string;
   page: number;
   text_preview: string;
+  type?: string;
+  imageUrl?: string;
+  caption?: string;
 }
 
 export interface DoneEvent {
@@ -25,6 +28,7 @@ export function useChatStream(token: string | null) {
       documentIds?: string[],
       mode = 'study',
       enabledPluginKeys?: string[],
+      storageKey?: string,
     ): Promise<string | null> => {
       if (!token) {
         setError('Authentication token is missing.');
@@ -50,6 +54,7 @@ export function useChatStream(token: string | null) {
             documentIds,
             mode,
             enabledPluginKeys,
+            storageKey,
           }),
         });
 

@@ -13,6 +13,12 @@ interface DocumentItem {
   sizeBytes: number;
   errorMessage?: string | null;
   createdAt: string;
+  summary?: {
+    textCount: number;
+    tableCount: number;
+    imageCount: number;
+    diagramCount: number;
+  };
 }
 
 interface DocumentListProps {
@@ -40,8 +46,23 @@ export default function DocumentList({ initialDocuments, token, refreshTrigger, 
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const data = await res.json();
-        setDocuments(data);
+        const list = await res.json();
+        // Fetch summary counts for each document to populate extraction summary card
+        const enriched = await Promise.all(
+          list.map(async (doc: any) => {
+            try {
+              const detailRes = await fetch(`${apiUrl}/documents/${doc.id}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (detailRes.ok) {
+                const detail = await detailRes.json();
+                return { ...doc, summary: detail.summary };
+              }
+            } catch {}
+            return doc;
+          })
+        );
+        setDocuments(enriched);
       }
     } catch (err) {
       console.error("Failed to fetch documents", err);
@@ -87,6 +108,8 @@ export default function DocumentList({ initialDocuments, token, refreshTrigger, 
           if (data.status === "READY" || data.status === "FAILED") {
             es.close();
             delete eventSources[doc.id];
+            // Re-fetch to get enriched counts once ready
+            fetchDocuments();
           }
         } catch (e) {
           console.error("Failed parsing SSE message", e);
@@ -155,73 +178,142 @@ export default function DocumentList({ initialDocuments, token, refreshTrigger, 
               className="glass-panel"
               style={{
                 display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "16px 20px",
+                flexDirection: "column",
+                gap: "16px",
+                padding: "20px",
                 transition: "border-color 0.2s",
               }}
             >
-              <div style={{ flex: 1, minWidth: 0, paddingRight: "16px" }}>
-                <h4
-                  style={{
-                    fontSize: "1.05rem",
-                    fontWeight: 600,
-                    marginBottom: "4px",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {doc.title}
-                </h4>
-                <div style={{ display: "flex", gap: "16px", fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
-                  <span>{doc.fileType.toUpperCase()}</span>
-                  <span>{formatSize(doc.sizeBytes)}</span>
-                  <span>Chunks: {doc.chunkCount || 0}</span>
-                  <span>Pages: {doc.pageCount || 0}</span>
-                  <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ flex: 1, minWidth: 0, paddingRight: "16px" }}>
+                  <h4
+                    style={{
+                      fontSize: "1.1rem",
+                      fontWeight: 600,
+                      marginBottom: "4px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {doc.title}
+                  </h4>
+                  <div style={{ display: "flex", gap: "16px", fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
+                    <span>{doc.fileType.toUpperCase()}</span>
+                    <span>{formatSize(doc.sizeBytes)}</span>
+                    <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
+                  </div>
                 </div>
-                {doc.errorMessage && (
-                  <p style={{ color: "var(--color-error)", fontSize: "0.825rem", marginTop: "6px" }}>
-                    ⚠️ {doc.errorMessage}
-                  </p>
-                )}
+
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: "6px",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.05em",
+                      background: badge.bg,
+                      color: badge.text,
+                      border: `1px solid ${badge.text}33`,
+                    }}
+                  >
+                    {badge.label}
+                  </span>
+
+                  {doc.status === "READY" && (
+                    <a
+                      href={`/dashboard/documents/${doc.id}`}
+                      style={{
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        background: "rgba(99, 102, 241, 0.1)",
+                        border: "1px solid rgba(99, 102, 241, 0.2)",
+                        color: "var(--color-secondary)",
+                        textDecoration: "none",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      Gallery View
+                    </a>
+                  )}
+
+                  <button
+                    onClick={() => handleDelete(doc.id)}
+                    disabled={deletingId === doc.id}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      background: "rgba(244,63,94,0.1)",
+                      border: "1px solid rgba(244,63,94,0.2)",
+                      color: "#f43f5e",
+                      cursor: deletingId === doc.id ? "wait" : "pointer",
+                      fontSize: "0.85rem",
+                      fontWeight: 600,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    {deletingId === doc.id ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                <span
+              {/* Extraction summary card */}
+              {doc.status === "READY" && doc.summary && (
+                <div
                   style={{
-                    padding: "4px 10px",
-                    borderRadius: "6px",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.05em",
-                    background: badge.bg,
-                    color: badge.text,
-                    border: `1px solid ${badge.text}33`,
-                  }}
-                >
-                  {badge.label}
-                </span>
-
-                <button
-                  onClick={() => handleDelete(doc.id)}
-                  disabled={deletingId === doc.id}
-                  style={{
-                    padding: "8px 12px",
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid var(--glass-border)",
                     borderRadius: "8px",
-                    background: "rgba(244,63,94,0.1)",
-                    border: "1px solid rgba(244,63,94,0.2)",
-                    color: "#f43f5e",
-                    cursor: deletingId === doc.id ? "wait" : "pointer",
-                    fontSize: "0.85rem",
-                    fontWeight: 600,
-                    transition: "all 0.2s",
+                    padding: "12px 16px",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, 1fr)",
+                    gap: "12px",
+                    textAlign: "center",
                   }}
                 >
-                  {deletingId === doc.id ? "Deleting..." : "Delete"}
-                </button>
-              </div>
+                  <div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff" }}>
+                      {doc.summary.textCount || 0}
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      Text Chunks
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff" }}>
+                      {doc.summary.imageCount || 0}
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      Images
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff" }}>
+                      {doc.summary.tableCount || 0}
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      Tables
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff" }}>
+                      {doc.summary.diagramCount || 0}
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      Diagrams
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {doc.errorMessage && (
+                <p style={{ color: "var(--color-error)", fontSize: "0.825rem", margin: 0 }}>
+                  ⚠️ {doc.errorMessage}
+                </p>
+              )}
             </div>
           );
         })

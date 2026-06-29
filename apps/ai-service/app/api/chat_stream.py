@@ -24,6 +24,7 @@ class StreamRequest(BaseModel):
     pages: List[int] = []
     chunks: List[Dict[str, Any]] = []
     tools: Optional[List[Dict[str, Any]]] = None
+    userPlan: Optional[str] = "FREE"
 
 @router.post("/chat/stream")
 async def chat_stream_endpoint(req: StreamRequest):
@@ -68,6 +69,8 @@ async def chat_stream_endpoint(req: StreamRequest):
             history=history_window,
             citations=req.citations,
             tools=req.tools,
+            user_plan=req.userPlan,
+            chunks=req.chunks,
         ):
             # Collect token events to reconstruct the assistant reply
             if session_id and event.startswith("event: token"):

@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     # OpenAI API Key
     OPENAI_API_KEY: str = ""
 
+    # Minio Object Storage Configuration
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin"
+    MINIO_BUCKET: str = "study-assistant"
+    MINIO_SECURE: bool = False
+
     model_config = SettingsConfigDict(
         env_file=("../../.env", ".env"),
         env_file_encoding="utf-8",

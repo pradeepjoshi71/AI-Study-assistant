@@ -189,4 +189,74 @@ export class DocumentsService {
       extractedTextLength: doc.extractedTextLength,
     };
   }
+
+  async findAssets(id: string, userId: string) {
+    await this.findOne(id, userId);
+    
+    // Find all chunks belonging to this document
+    const chunks = await this.prisma.documentChunk.findMany({
+      where: { documentId: id },
+      include: {
+        images: true,
+      },
+    });
+
+    // Extract all image/table modal assets mapped in database chunks
+    const assets = [];
+    for (const chunk of chunks) {
+      for (const img of chunk.images) {
+        let signedUrl = "";
+        try {
+          signedUrl = await this.storage.getSignedUrl(img.storageKey, 3600);
+        } catch {}
+        
+        assets.push({
+          id: img.id,
+          chunkId: img.chunkId,
+          modality: chunk.modality,
+          storageKey: img.storageKey,
+          url: signedUrl,
+          width: img.width,
+          height: img.height,
+          pageRef: img.pageRef,
+          caption: img.caption,
+          imageHash: img.imageHash,
+        });
+      }
+    }
+    return assets;
+  }
+
+  async uploadInlineImage(file: Express.Multer.File, userId: string) {
+    const orgId = userContextStorage.getStore()?.orgId ?? "personal";
+    const imageId = createId();
+    const fileExtension = file.originalname.split(".").pop() || "png";
+    const storageKey = `orgs/${orgId}/inline-uploads/${userId}/${imageId}.${fileExtension}`;
+
+    try {
+      const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+      
+      // Upload custom object key directly
+      await this.storage["client"].send(
+        new PutObjectCommand({
+          Bucket: this.storage["bucket"],
+          Key: storageKey,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+          ContentLength: file.size,
+          Metadata: {
+            orgId,
+            userId,
+            isInlineUpload: "true",
+          },
+        }),
+      );
+
+      const signedUrl = await this.storage.getSignedUrl(storageKey, 3600);
+      return { storageKey, url: signedUrl };
+    } catch (err: any) {
+      this.logger.error(`Inline image storage upload error: ${err.message}`);
+      throw new BadRequestException("Failed to upload inline image to storage");
+    }
+  }
 }

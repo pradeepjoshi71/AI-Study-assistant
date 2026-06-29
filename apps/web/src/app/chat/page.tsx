@@ -40,6 +40,10 @@ export default function ChatPage() {
 
   const [inputMessage, setInputMessage] = useState("");
   const [activeCitation, setActiveCitation] = useState<CitationEvent | null>(null);
+  
+  // Image attachment state
+  const [attachedImage, setAttachedImage] = useState<{ storageKey: string; url: string } | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Hook usage
   const {
@@ -207,18 +211,48 @@ export default function ChatPage() {
     setMessages([]);
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    setUploadingImage(true);
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
+    try {
+      const res = await fetch(`${apiUrl}/documents/upload-inline-image`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAttachedImage({ storageKey: data.storageKey, url: data.url });
+      } else {
+        alert("Failed to upload image.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error uploading image.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const submitQuery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputMessage.trim() || isStreaming) return;
 
     const queryText = inputMessage;
+    const imgKey = attachedImage?.storageKey;
     setInputMessage("");
+    setAttachedImage(null);
 
     // Optimistically add user bubble
     const userMsg: ChatMessage = {
       id: Math.random().toString(),
       role: "USER",
-      content: queryText,
+      content: attachedImage ? `${queryText} [Attached Image: ${attachedImage.url}]` : queryText,
     };
     setMessages((prev) => [...prev, userMsg]);
 
@@ -227,7 +261,8 @@ export default function ChatPage() {
       activeConvId || undefined,
       selectedDocIds,
       chatMode,
-      enabledPluginKeys
+      enabledPluginKeys,
+      imgKey
     );
 
     if (resultId) {
@@ -524,7 +559,25 @@ export default function ChatPage() {
 
         {/* Input Bar */}
         <footer style={{ padding: "20px", borderTop: "1px solid var(--glass-border)", background: "rgba(10,10,12,0.4)" }}>
-          <form onSubmit={submitQuery} style={{ display: "flex", gap: "10px" }}>
+          {/* Image attachment preview */}
+          {attachedImage && (
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "rgba(99, 102, 241, 0.08)", border: "1px solid rgba(99, 102, 241, 0.2)", borderRadius: "8px", padding: "8px 12px", marginBottom: "12px", width: "max-content" }}>
+              <img src={attachedImage.url} alt="Attachment thumbnail" style={{ height: "32px", width: "40px", objectFit: "cover", borderRadius: "4px" }} />
+              <span style={{ fontSize: "0.8rem", color: "#fff" }}>Image Attached</span>
+              <button type="button" onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f43f5e", cursor: "pointer", fontWeight: 700, marginLeft: "8px" }}>✕</button>
+            </div>
+          )}
+          {uploadingImage && (
+            <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "12px" }}>Uploading attachment...</div>
+          )}
+
+          <form onSubmit={submitQuery} style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            {/* Attachment input trigger button */}
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "46px", height: "46px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--glass-border)", borderRadius: "10px", cursor: "pointer", transition: "all 0.2s" }} title="Attach image for visual questions">
+              <input type="file" onChange={handleImageUpload} style={{ display: "none" }} accept="image/*" disabled={isStreaming} />
+              <span style={{ fontSize: "1.2rem" }}>📎</span>
+            </label>
+
             <input
               type="text"
               placeholder={selectedDocIds.length > 0 ? "Ask anything about the active documents..." : "No documents selected. Questions will be answered from general context if available."}
@@ -548,6 +601,7 @@ export default function ChatPage() {
               disabled={isStreaming}
               style={{
                 padding: "0 24px",
+                height: "46px",
                 background: "var(--color-primary)",
                 border: "none",
                 borderRadius: "10px",

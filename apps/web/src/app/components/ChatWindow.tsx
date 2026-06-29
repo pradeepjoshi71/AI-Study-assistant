@@ -62,26 +62,44 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
       if (citation) {
         parts.push(
-          <button
-            key={matchIndex}
-            onClick={() => setActiveCitation(citation)}
-            style={{
-              background: 'rgba(6, 182, 212, 0.12)',
-              border: '1px solid rgba(6, 182, 212, 0.3)',
-              borderRadius: '4px',
-              padding: '1px 6px',
-              fontSize: '0.8rem',
-              color: 'var(--color-secondary)',
-              cursor: 'pointer',
-              margin: '0 3px',
-              fontWeight: 600,
-              fontFamily: 'var(--font-display)',
-              transition: 'all 0.2s',
-            }}
-            title="Click to view grounding text source"
-          >
-            pg. {citation.page}
-          </button>
+          <span key={matchIndex} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <button
+              onClick={() => setActiveCitation(citation)}
+              style={{
+                background: 'rgba(6, 182, 212, 0.12)',
+                border: '1px solid rgba(6, 182, 212, 0.3)',
+                borderRadius: '4px',
+                padding: '1px 6px',
+                fontSize: '0.8rem',
+                color: 'var(--color-secondary)',
+                cursor: 'pointer',
+                margin: '0 3px',
+                fontWeight: 600,
+                fontFamily: 'var(--font-display)',
+                transition: 'all 0.2s',
+              }}
+              title="Click to view grounding text source"
+            >
+              pg. {citation.page}
+            </button>
+            {citation.imageUrl && (
+              <img
+                src={citation.imageUrl}
+                alt="Citation preview"
+                onClick={() => setActiveCitation(citation)}
+                style={{
+                  height: '24px',
+                  width: '32px',
+                  objectFit: 'cover',
+                  borderRadius: '3px',
+                  border: '1px solid var(--glass-border)',
+                  cursor: 'pointer',
+                  verticalAlign: 'middle',
+                  display: 'inline-block',
+                }}
+              />
+            )}
+          </span>
         );
       } else {
         parts.push(match[0]); // fallback
@@ -241,9 +259,20 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 ✕
               </button>
             </div>
-            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '16px', borderRadius: '8px', border: '1px solid var(--glass-border)', maxHeight: '200px', overflowY: 'auto' }}>
+            
+            {activeCitation.imageUrl && (
+              <div style={{ display: 'flex', justifyContent: 'center', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px', border: '1px solid var(--glass-border)' }}>
+                <img
+                  src={activeCitation.imageUrl}
+                  alt={activeCitation.caption || "Citation visual source"}
+                  style={{ maxHeight: '200px', maxWidth: '100%', objectFit: 'contain' }}
+                />
+              </div>
+            )}
+
+            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '16px', borderRadius: '8px', border: '1px solid var(--glass-border)', maxHeight: '180px', overflowY: 'auto' }}>
               <p style={{ fontSize: '0.95rem', color: '#fff', margin: 0, lineHeight: 1.6, fontStyle: 'italic' }}>
-                "{activeCitation.text_preview}"
+                {activeCitation.imageUrl ? activeCitation.caption : `"${activeCitation.text_preview}"`}
               </p>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>

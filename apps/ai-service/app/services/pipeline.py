@@ -81,13 +81,19 @@ class PipelineService:
         doc_id: str,
         storage_key: str,
         mime_type: str,
-        local_path: Optional[str] = None
+        local_path: Optional[str] = None,
+        org_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Parses a document/URL based on the storage_key and mime_type.
         If local_path is provided, it reads from it; otherwise, it downloads/fetches.
+        org_id is forwarded to MultiModalParser for Minio image upload paths.
         """
         logger.info(f"Parsing document: id={doc_id}, key={storage_key}, mime={mime_type}")
+
+        # Stash context for _parse_pdf → MultiModalParser
+        self._current_org_id = org_id
+        self._current_doc_id = doc_id
 
         # Check if the storage key is a URL
         is_url = storage_key.startswith("http://") or storage_key.startswith("https://")
@@ -194,6 +200,33 @@ class PipelineService:
         except Exception as e:
             logger.error(f"Failed to parse PDF {path}: {e}")
             raise e
+
+        # ── Multimodal extraction (images + tables + diagrams) ──────────────
+        # Only runs when org_id/doc_id context is available on the service
+        org_id = getattr(self, "_current_org_id", None)
+        doc_id = getattr(self, "_current_doc_id", None)
+        if org_id and doc_id:
+            try:
+                from app.services.multimodal_parser import MultiModalParser
+                mm_parser = MultiModalParser(org_id=org_id, doc_id=doc_id)
+                modal_assets = mm_parser.parse_pdf(path)
+                for asset in modal_assets:
+                    # Append each visual asset as its own structured chunk
+                    structured.append({
+                        "text": asset.get("caption", ""),
+                        "pageRef": asset.get("page_ref", 1),
+                        "sectionTitle": f"{asset['modality'].capitalize()} (page {asset.get('page_ref', 1)})",
+                        # Extra fields forwarded to the caller for ChunkImage persistence
+                        "modality": asset["modality"],
+                        "storageKey": asset.get("storage_key"),
+                        "imageHash": asset.get("image_hash"),
+                        "imageWidth": asset.get("width"),
+                        "imageHeight": asset.get("height"),
+                        "fromCache": asset.get("from_cache", False),
+                    })
+                logger.info(f"MultiModalParser added {len(modal_assets)} visual assets for doc {doc_id}.")
+            except Exception as mm_err:
+                logger.error(f"MultiModalParser failed (non-fatal): {mm_err}")
 
         return structured
 

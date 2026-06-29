@@ -46,11 +46,27 @@ def build_citations(reranked_chunks: List[Dict[str, Any]]) -> List[Dict[str, Any
             continue
 
         seen[chunk_id] = score
+        
+        # Get Minio presigned url if it's an image/diagram modality and storageKey is present
+        image_url = None
+        storage_key = chunk.get("storageKey") or chunk.get("storage_key")
+        modality = (chunk.get("modality") or "TEXT").upper()
+        if modality in ("IMAGE", "DIAGRAM") and storage_key:
+            try:
+                from app.services.minio_storage import get_presigned_url
+                image_url = get_presigned_url(storage_key)
+            except Exception:
+                pass
+
         citations[chunk_id] = {
             "document_id": doc_id,
             "chunk_id":    chunk_id,
             "page":        page,
             "score":       round(score, 6),
+            "type":        modality,
+            "imageUrl":    image_url,
+            "caption":     chunk.get("caption") or "",
+            "pageRef":     page,
         }
 
     # Sort by score descending (highest-relevance citations first)
