@@ -15,6 +15,334 @@
         ]
       }
     },
+    "/api/v1/v1/internal/moderation/verdict": {
+      "post": {
+        "operationId": "InternalModerationController_handleVerdict_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "InternalModeration"
+        ]
+      }
+    },
+    "/api/v1/v1/moderation/report/{contentId}": {
+      "post": {
+        "operationId": "ModerationController_reportContent_v1",
+        "parameters": [
+          {
+            "name": "contentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Moderation"
+        ]
+      }
+    },
+    "/api/v1/v1/moderation/appeal/{contentId}": {
+      "post": {
+        "operationId": "ModerationController_appealContent_v1",
+        "parameters": [
+          {
+            "name": "contentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppealDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Moderation"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/moderation/rules": {
+      "get": {
+        "operationId": "ModerationAdminController_getRules_v1",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ModerationAdmin"
+        ]
+      },
+      "post": {
+        "operationId": "ModerationAdminController_createRule_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ModerationAdmin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/moderation/rules/{id}": {
+      "put": {
+        "operationId": "ModerationAdminController_updateRule_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ModerationAdmin"
+        ]
+      },
+      "delete": {
+        "operationId": "ModerationAdminController_deleteRule_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ModerationAdmin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/moderation": {
+      "get": {
+        "operationId": "ModerationAdminController_getModerationQueue_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ModerationAdmin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/moderation/{logId}/resolve": {
+      "patch": {
+        "operationId": "ModerationAdminController_resolveLog_v1",
+        "parameters": [
+          {
+            "name": "logId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ModerationAdmin"
+        ]
+      }
+    },
+    "/api/v1/v1/analytics/track": {
+      "post": {
+        "operationId": "AnalyticsController_trackBulkEvents_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Analytics"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/analytics/metrics": {
+      "get": {
+        "operationId": "AnalyticsMetricsController_getMetrics_v1",
+        "parameters": [
+          {
+            "name": "metric",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "dau",
+                "retention_d1",
+                "retention_d7",
+                "retention_d30",
+                "funnel"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DAILY",
+                "WEEKLY",
+                "MONTHLY"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "tenantId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read BI MetricSnapshots for analytics dashboard",
+        "tags": [
+          "Analytics Metrics"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/analytics/tenants": {
+      "get": {
+        "operationId": "AnalyticsMetricsController_listTenants_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List tenant IDs for analytics filter",
+        "tags": [
+          "Analytics Metrics"
+        ]
+      }
+    },
     "/api/v1/v1/auth/register": {
       "post": {
         "operationId": "AuthController_register_v1",
@@ -5261,6 +5589,22 @@
       }
     },
     "schemas": {
+      "ReportDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "AppealDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RuleDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ResolveDto": {
+        "type": "object",
+        "properties": {}
+      },
       "RegisterDto": {
         "type": "object",
         "properties": {}

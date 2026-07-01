@@ -31,6 +31,7 @@ enum DocumentStatus {
   PROCESSING  // Worker is chunking / embedding
   READY       // Fully processed and searchable
   FAILED      // Processing failed (see errorMessage)
+  HIDDEN      // Halted/moderated by automated check
 }
 
 enum MessageRole {
@@ -216,6 +217,7 @@ model Message {
   role           MessageRole
   content        String       @db.Text
   citations      Json?
+  status         String       @default("ACTIVE")
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -1689,6 +1691,7 @@ model GroupMessage {
   content     String           @db.Text
   citations   Json?            @default("[]")
   messageType GroupMessageType @default(TEXT)
+  status      String           @default("ACTIVE")
   createdAt   DateTime         @default(now())
 
   group       StudyGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -2027,6 +2030,7 @@ enum ListingStatus {
   PUBLISHED
   REJECTED
   UNPUBLISHED
+  HIDDEN
 }
 
 enum ListingItemType {
@@ -2179,9 +2183,13 @@ model Tenant {
   trialEndsAt  DateTime?
   createdAt    DateTime     @default(now())
 
-  config        TenantConfig?
-  billing       TenantBilling?
-  organizations Organization[]
+  config          TenantConfig?
+  billing         TenantBilling?
+  organizations   Organization[]
+  moderationRules ModerationRule[]
+  moderationLogs  ModerationLog[]
+  contentReports  ContentReport[]
+  metricSnapshots MetricSnapshot[]
 
   @@index([subdomain])
   @@index([customDomain])
@@ -2213,3 +2221,85 @@ model TenantBilling {
 
   @@map("tenant_billings")
 }
+
+model ModerationRule {
+  id         String   @id @default(uuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category   String   // e.g. "hate", "harassment", "self-harm", "sexual", "violence"
+  threshold  Float    // score threshold (0.0 - 1.0)
+  action     String   // "BLOCK" or "FLAG"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, category])
+  @@map("moderation_rules")
+}
+
+model ModerationLog {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orgId       String?
+  contentId   String
+  contentType String    // e.g. "message", "document", "listing"
+  verdict     Boolean   // true if safe, false if flagged/blocked
+  scores      Json      // category scores
+  action      String    // "ALLOW", "FLAG", "BLOCK"
+  resolvedAt  DateTime?
+  reviewedBy  String?
+  resolved    Boolean?
+  createdAt   DateTime  @default(now())
+
+  @@map("moderation_logs")
+}
+
+model ContentReport {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contentId   String
+  contentType String   // e.g. "message", "document", "listing"
+  reason      String?
+  reporterId  String
+  createdAt   DateTime @default(now())
+
+  @@index([contentId])
+  @@map("content_reports")
+}
+
+enum MetricPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model MetricSnapshot {
+  id         String       @id @default(uuid())
+  tenantId   String
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  metric     String
+  dimensions Json
+  value      Float
+  period     MetricPeriod
+  date       DateTime
+  createdAt  DateTime     @default(now())
+
+  @@map("metric_snapshots")
+}
+
+model AnalyticsEvent {
+  id         String   @default(uuid())
+  tenantId   String
+  orgId      String?
+  userId     String?
+  event      String
+  properties Json
+  sessionId  String?
+  createdAt  DateTime @default(now())
+
+  @@id([id, createdAt])
+  @@map("analytics_events")
+}
+
+

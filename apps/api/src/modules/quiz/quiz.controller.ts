@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { QuizService } from './quiz.service';
 import { GenerateQuizDto, SubmitQuizDto } from './quiz.types';
+import { Track } from '../../common/decorators/track.decorator';
 
 @UseGuards(JwtAuthGuard)
 @Controller('study')
@@ -19,6 +20,7 @@ export class QuizController {
   }
 
   @Post('quiz/:id/submit')
+  @Track('quiz.submit')
   async submitQuiz(
     @Param('id') quizId: string,
     @Body() dto: SubmitQuizDto,

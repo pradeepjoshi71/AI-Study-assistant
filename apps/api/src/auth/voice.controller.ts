@@ -19,6 +19,8 @@ import { userContextStorage } from "../common/context/user-context";
 
 import { RequiresFeature } from "../common/guards/tenant-feature.guard";
 
+import { Track } from "../common/decorators/track.decorator";
+
 @UseGuards(MobileJwtAuthGuard)
 @Controller("voice")
 @RequiresFeature("voice")
@@ -31,6 +33,7 @@ export class VoiceController {
   ) {}
 
   @Post("adaptive/recommendation")
+  @Track("feature.usage")
   async handleAdaptiveRecommendation(
     @Body() dto: {
       userId: string;

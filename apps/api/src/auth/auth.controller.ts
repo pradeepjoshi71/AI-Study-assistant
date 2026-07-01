@@ -25,6 +25,8 @@ import { AuditInterceptor } from "../audit/interceptors/audit.interceptor";
 import { Throttle } from "@nestjs/throttler";
 import { User } from "@prisma/client";
 
+import { Track } from "../common/decorators/track.decorator";
+
 @Controller("auth")
 @UseInterceptors(AuditInterceptor)
 export class AuthController {
@@ -52,6 +54,7 @@ export class AuthController {
 
   @Throttle({ default: { limit: 5, ttl: 60000 } }) // Limit to 5 login attempts per minute
   @Post("login")
+  @Track("auth.login")
   @Audit("auth.login", "auth")
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto) {

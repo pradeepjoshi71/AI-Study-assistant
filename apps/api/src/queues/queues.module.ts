@@ -28,6 +28,7 @@ import { WeaknessDetectionProcessor } from '../exam/weakness-detection.processor
 import { ExamMasteryUpdateProcessor } from '../exam/exam-mastery-update.processor';
 import { GroupDocumentSyncProcessor } from './group-document-sync.processor';
 import { GroupSessionSummaryProcessor } from './group-session-summary.processor';
+import { AnalyticsProcessor } from '../common/processors/analytics.processor';
 
 const QUEUE_NAMES = [
   'document-processing',
@@ -54,6 +55,7 @@ const QUEUE_NAMES = [
   'webhook-delivery',
   'referral-reward',
   'listing-moderation',
+  'analytics',
 ];
 
 
@@ -114,6 +116,7 @@ const QUEUE_NAMES = [
     ExamMasteryUpdateProcessor,
     GroupDocumentSyncProcessor,
     GroupSessionSummaryProcessor,
+    AnalyticsProcessor,
   ],
   exports: [BullModule],
 })

@@ -306,6 +306,33 @@ class VoiceSession(Base):
     updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ModerationRule(Base):
+    __tablename__ = "moderation_rules"
+
+    id = Column(String, primary_key=True)
+    tenantId = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    threshold = Column(Float, nullable=False)
+    action = Column(String, nullable=False)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+    updatedAt = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ModerationLog(Base):
+    __tablename__ = "moderation_logs"
+
+    id = Column(String, primary_key=True)
+    tenantId = Column(String, nullable=False)
+    orgId = Column(String, nullable=True)
+    contentId = Column(String, nullable=False)
+    contentType = Column(String, nullable=False)
+    verdict = Column(Boolean, nullable=False)
+    scores = Column(JSON, nullable=False)
+    action = Column(String, nullable=False)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+
+
+
 
 
 

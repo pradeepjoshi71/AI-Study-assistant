@@ -30,6 +30,8 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { PrismaService } from "../prisma/prisma.service";
 import { BadRequestException } from "@nestjs/common";
 
+import { Track } from "../common/decorators/track.decorator";
+
 @UseGuards(JwtAuthGuard)
 @Controller("documents")
 @UseInterceptors(AuditInterceptor)
@@ -40,6 +42,7 @@ export class DocumentsController {
   ) {}
 
   @Post("upload")
+  @Track("document.upload")
   @Audit("document.upload", "document")
   @UseInterceptors(FileInterceptor("file"))
   async uploadFile(

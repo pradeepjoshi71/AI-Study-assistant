@@ -28,8 +28,8 @@ export class TenantMiddleware implements NestMiddleware {
   async use(req: Request, res: Response, next: NextFunction) {
     const path = req.path || req.url || "";
 
-    // ── Exclude auth and public tenant-config endpoints ──────────────────────
-    if (path.includes("/auth") || path.includes("/tenant-config")) {
+    // ── Exclude auth, public tenant-config, and internal microservice endpoints ──
+    if (path.includes("/auth") || path.includes("/tenant-config") || path.includes("/internal/")) {
       return next();
     }
 

@@ -9,6 +9,8 @@ import { RateLimit } from '../common/decorators/rate-limit.decorator';
 import { Audit } from '../audit/decorators/audit.decorator';
 import { AuditInterceptor } from '../audit/interceptors/audit.interceptor';
 
+import { Track } from '../common/decorators/track.decorator';
+
 @UseGuards(JwtAuthGuard)
 @Controller('chat')
 @UseInterceptors(AuditInterceptor)
@@ -19,6 +21,7 @@ export class ChatController {
   ) {}
 
   @Post('send')
+  @Track('chat.send')
   @Audit('chat.created', 'chat')
   @UseGuards(RateLimitGuard)
   @RateLimit({ limit: 20, window: 60 })

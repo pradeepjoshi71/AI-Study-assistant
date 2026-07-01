@@ -61,6 +61,14 @@ import { AuditModule } from "./audit/audit.module";
 import { RetentionModule } from "./retention/retention.module";
 import { ComplianceModule } from "./compliance/compliance.module";
 import { SecurityGuardModule } from "./security-guard/security-guard.module";
+import { InternalModerationController } from "./common/controllers/internal-moderation.controller";
+import { ModerationController } from "./common/controllers/moderation.controller";
+import { ModerationAdminController } from "./common/controllers/moderation-admin.controller";
+import { AnalyticsService } from "./common/services/analytics.service";
+import { AnalyticsProcessor } from "./common/processors/analytics.processor";
+import { AnalyticsController } from "./common/controllers/analytics.controller";
+import { AnalyticsMetricsController } from "./common/controllers/analytics-metrics.controller";
+import { TrackInterceptor } from "./common/decorators/track.decorator";
 
 // Phase 3.2 AI Agent Marketplace Modules
 import { PluginRuntimeModule } from "./plugin-runtime/plugin-runtime.module";
@@ -229,8 +237,20 @@ export class HealthController {
     ApiKeyModule,
     PublicApiModule,
   ],
-  controllers: [HealthController],
+  controllers: [
+    HealthController,
+    InternalModerationController,
+    ModerationController,
+    ModerationAdminController,
+    AnalyticsController,
+    AnalyticsMetricsController,
+  ],
   providers: [
+    AnalyticsService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TrackInterceptor,
+    },
     {
       provide: APP_GUARD,
       useClass: TieredThrottlerGuard,

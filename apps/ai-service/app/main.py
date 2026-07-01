@@ -87,6 +87,7 @@ from app.api.exam_engine import router as exam_engine_router
 from app.api.exam_scorer import router as exam_scorer_router
 from app.api.weakness_detector import router as weakness_detector_router
 from app.api.group_rag import router as group_rag_router
+from app.api.moderation import router as moderation_router
 app.include_router(chat_stream_router, prefix="/ai")
 app.include_router(memory_summarizer_router, prefix="/ai")
 app.include_router(synthesis_engine_router, prefix="/ai")
@@ -105,6 +106,7 @@ app.include_router(exam_engine_router, prefix="/ai")
 app.include_router(exam_scorer_router, prefix="/ai")
 app.include_router(weakness_detector_router, prefix="/ai")
 app.include_router(group_rag_router, prefix="/ai")
+app.include_router(moderation_router, prefix="/ai")
 
 
 
@@ -207,6 +209,26 @@ async def startup_event():
         logger.info("faster-whisper medium model startup pre-load complete.")
     except Exception as e:
         logger.warning(f"faster-whisper model pre-load failed (non-fatal): {e}")
+
+    # Start hourly BI metrics cron (APScheduler BackgroundScheduler)
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.interval import IntervalTrigger
+        from app.api.bi_service import run_bi_cron
+
+        _bi_scheduler = BackgroundScheduler()
+        _bi_scheduler.add_job(
+            run_bi_cron,
+            trigger=IntervalTrigger(hours=1),
+            id="bi_hourly_cron",
+            name="Hourly BI MetricSnapshot cron",
+            replace_existing=True,
+            max_instances=1,  # Prevent overlap on slow DBs
+        )
+        _bi_scheduler.start()
+        logger.info("BI hourly cron registered via APScheduler.")
+    except Exception as e:
+        logger.warning(f"BI cron scheduler startup failed (non-fatal): {e}")
 
 # Database setup for API handlers
 import os

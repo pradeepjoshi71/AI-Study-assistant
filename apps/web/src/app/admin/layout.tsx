@@ -55,6 +55,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Flags', path: '/admin/flags' },
     { name: 'Logs', path: '/admin/logs' },
     { name: 'Compliance', path: '/admin/compliance' },
+    { name: 'Analytics', path: '/admin/analytics' },
   ];
 
   return (
