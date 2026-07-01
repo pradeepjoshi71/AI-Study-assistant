@@ -32,11 +32,14 @@ class UploadDocumentDto {
   title?: string;
 }
 
+import { RequiresFeature } from "../../common/guards/tenant-feature.guard";
+
 @ApiTags('Public Documents')
 @ApiBearerAuth('bearer')
 @UseGuards(ApiKeyGuard)
 @UseFilters(PublicApiExceptionFilter)
 @Controller({ path: 'api/public/v1/documents', version: VERSION_NEUTRAL })
+@RequiresFeature("api_access")
 export class PublicDocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 

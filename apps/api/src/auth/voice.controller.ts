@@ -17,8 +17,11 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { createId } from "@paralleldrive/cuid2";
 import { userContextStorage } from "../common/context/user-context";
 
+import { RequiresFeature } from "../common/guards/tenant-feature.guard";
+
 @UseGuards(MobileJwtAuthGuard)
 @Controller("voice")
+@RequiresFeature("voice")
 export class VoiceController {
   constructor(
     private readonly prisma: PrismaService,

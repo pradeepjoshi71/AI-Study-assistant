@@ -65,6 +65,10 @@ export class WebhookHandler {
           await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
           break;
 
+        case "payment_intent.succeeded":
+          await this.handleMarketplacePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
+          break;
+
         default:
           this.logger.debug(`Unhandled Stripe event type: ${event.type}`);
       }
@@ -407,5 +411,25 @@ export class WebhookHandler {
     } catch (err: any) {
       this.logger.error(`Failed to dispatch BullMQ job: ${err.message}`);
     }
+  }
+
+  /**
+   * Handles payment_intent.succeeded Stripe events.
+   * Only acts on marketplace purchases (metadata.listingId present).
+   * Emits "marketplace.payment_intent.succeeded" for MarketplacePurchaseService to handle.
+   */
+  private async handleMarketplacePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+    const { listingId, buyerId } = paymentIntent.metadata ?? {};
+
+    if (!listingId || !buyerId) {
+      // Not a marketplace PaymentIntent — ignore silently
+      return;
+    }
+
+    this.logger.log(
+      `Marketplace payment_intent.succeeded: PI=${paymentIntent.id}, listing=${listingId}, buyer=${buyerId}`,
+    );
+
+    this.eventEmitter.emit("marketplace.payment_intent.succeeded", paymentIntent);
   }
 }

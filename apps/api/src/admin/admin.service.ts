@@ -183,4 +183,68 @@ export class AdminService {
 
     return { total, page, limit, items };
   }
+
+  // ── Reseller Administration ────────────────────────────────────────────────
+
+  async getResellers() {
+    const resellers = await this.prisma.resellerAccount.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            isActive: true,
+          },
+        },
+      },
+    });
+
+    const enriched = await Promise.all(
+      resellers.map(async (reseller) => {
+        const tenants = await this.prisma.tenant.findMany({
+          where: { resellerId: reseller.userId },
+          include: { plan: true },
+        });
+
+        const tenantCount = tenants.length;
+        const mrr = tenants
+          .filter((t) => t.status === "ACTIVE")
+          .reduce((sum, t) => sum + (t.plan?.price || 0), 0);
+
+        return {
+          userId: reseller.userId,
+          name: reseller.user.name || reseller.user.email,
+          email: reseller.user.email,
+          stripeConnectId: reseller.stripeConnectId,
+          commissionRate: reseller.commissionRate,
+          isActive: reseller.user.isActive,
+          tenantCount,
+          mrr,
+          createdAt: reseller.createdAt,
+        };
+      }),
+    );
+
+    return enriched;
+  }
+
+  async updateResellerCommission(userId: string, commissionRate: number) {
+    return this.prisma.resellerAccount.update({
+      where: { userId },
+      data: { commissionRate },
+    });
+  }
+
+  async toggleResellerSuspension(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException("Reseller user not found");
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { isActive: !user.isActive },
+    });
+
+    return { id: updated.id, isActive: updated.isActive };
+  }
 }

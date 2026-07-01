@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { AsyncLocalStorage } from "async_hooks";
 
 export const prismaStorage = new AsyncLocalStorage<{ useReplica: boolean }>();
+import { tenantContextStorage } from "../common/context/tenant-context";
 
 @Injectable()
 export class PrismaService
@@ -60,6 +61,52 @@ export class PrismaService
       this.$connect(),
       this.replica.$connect(),
     ]);
+
+    const tenantScopingMiddleware = async (params: any, next: any) => {
+      const tenantId = tenantContextStorage.getStore()?.tenantId;
+      if (tenantId && params.model === "Organization") {
+        if (!params.args) params.args = {};
+        
+        if (
+          params.action === "findUnique" ||
+          params.action === "findFirst" ||
+          params.action === "findMany" ||
+          params.action === "count" ||
+          params.action === "update" ||
+          params.action === "delete" ||
+          params.action === "updateMany" ||
+          params.action === "deleteMany"
+        ) {
+          if (!params.args.where) params.args.where = {};
+          params.args.where.tenantId = tenantId;
+        }
+
+        if (params.action === "create") {
+          if (!params.args.data) params.args.data = {};
+          params.args.data.tenantId = tenantId;
+        }
+
+        if (params.action === "createMany") {
+          if (!params.args.data) params.args.data = [];
+          if (Array.isArray(params.args.data)) {
+            params.args.data.forEach((item: any) => {
+              item.tenantId = tenantId;
+            });
+          }
+        }
+
+        if (params.action === "upsert") {
+          if (!params.args.create) params.args.create = {};
+          if (!params.args.update) params.args.update = {};
+          params.args.create.tenantId = tenantId;
+          params.args.update.tenantId = tenantId;
+        }
+      }
+      return next(params);
+    };
+
+    this.$use(tenantScopingMiddleware);
+    this.replica.$use(tenantScopingMiddleware);
 
     try {
       await this.$executeRawUnsafe(`ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY`);

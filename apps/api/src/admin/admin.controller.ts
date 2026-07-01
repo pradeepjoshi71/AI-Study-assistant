@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -101,13 +102,35 @@ export class AdminController {
   }
 
   @Get('audit-logs')
-  @SuperAdmin()
-  getAuditLogs(@Query() query: QueryAuditLogsDto) {
+  async getAuditLogs(@Query() query: QueryAuditLogsDto) {
     return this.adminService.getAuditLogs({
       organizationId: query.organizationId,
       actorId: query.actorId,
       page: query.page,
       limit: query.limit,
     });
+  }
+
+  // ── Reseller Administration ────────────────────────────────────────────────
+
+  @Get('resellers')
+  @SuperAdmin()
+  async getResellers() {
+    return this.adminService.getResellers();
+  }
+
+  @Patch('resellers/:id/commission')
+  @SuperAdmin()
+  async updateCommission(
+    @Param('id') userId: string,
+    @Body('commissionRate') commissionRate: number,
+  ) {
+    return this.adminService.updateResellerCommission(userId, commissionRate);
+  }
+
+  @Patch('resellers/:id/suspend')
+  @SuperAdmin()
+  async suspendReseller(@Param('id') userId: string) {
+    return this.adminService.toggleResellerSuspension(userId);
   }
 }

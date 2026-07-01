@@ -657,6 +657,543 @@
         ]
       }
     },
+    "/api/v1/v1/marketplace": {
+      "get": {
+        "operationId": "MarketplaceController_getMarketplace_v1",
+        "parameters": [
+          {
+            "name": "type",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "priceMin",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "priceMax",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ratingMin",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/marketplace/search": {
+      "get": {
+        "operationId": "MarketplaceController_searchMarketplace_v1",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/marketplace/creator/stats": {
+      "get": {
+        "operationId": "MarketplaceController_getStats_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/marketplace/creator/payouts": {
+      "get": {
+        "operationId": "MarketplaceController_getPayouts_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/marketplace/purchases": {
+      "get": {
+        "operationId": "MarketplaceController_getPurchases_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/marketplace/listings": {
+      "post": {
+        "operationId": "ListingsController_createListing_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateListingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Listings"
+        ]
+      }
+    },
+    "/api/v1/v1/marketplace/listings/{id}/publish": {
+      "post": {
+        "operationId": "ListingsController_publishListing_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Listings"
+        ]
+      }
+    },
+    "/api/v1/v1/marketplace/listings/{id}/purchase": {
+      "post": {
+        "operationId": "ListingsController_purchaseListing_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Listings"
+        ]
+      }
+    },
+    "/api/v1/v1/marketplace/listings/{id}": {
+      "get": {
+        "operationId": "ListingsController_getListing_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reviewLimit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reviewPage",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Listings"
+        ]
+      }
+    },
+    "/api/v1/v1/marketplace/listings/{id}/reviews": {
+      "post": {
+        "operationId": "ListingsController_submitReview_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Listings"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/marketplace/{id}/approve": {
+      "patch": {
+        "operationId": "MarketplaceAdminController_approveListing_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "MarketplaceAdmin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/marketplace/{id}/reject": {
+      "patch": {
+        "operationId": "MarketplaceAdminController_rejectListing_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectListingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "MarketplaceAdmin"
+        ]
+      }
+    },
+    "/api/v1/v1/internal/audit": {
+      "post": {
+        "operationId": "AuditController_logInternalAudit_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Audit"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/plans": {
+      "get": {
+        "operationId": "BillingController_getPlans_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/subscription": {
+      "get": {
+        "operationId": "BillingController_getSubscription_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      },
+      "delete": {
+        "operationId": "BillingController_cancel_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/subscribe": {
+      "post": {
+        "operationId": "BillingController_upgrade_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpgradeSubscriptionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/checkout": {
+      "post": {
+        "operationId": "BillingController_createCheckout_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/portal": {
+      "post": {
+        "operationId": "BillingController_createPortal_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/summary": {
+      "get": {
+        "operationId": "BillingController_getSummary_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/invoices": {
+      "get": {
+        "operationId": "BillingController_getInvoices_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/webhook": {
+      "post": {
+        "operationId": "BillingController_handleStripeWebhook_v1",
+        "parameters": [
+          {
+            "name": "stripe-signature",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/usage": {
+      "get": {
+        "operationId": "UsageController_getOrgUsage_v1",
+        "parameters": [
+          {
+            "name": "days",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Usage"
+        ]
+      }
+    },
+    "/api/v1/v1/usage/me": {
+      "get": {
+        "operationId": "UsageController_getMyUsage_v1",
+        "parameters": [
+          {
+            "name": "days",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Usage"
+        ]
+      }
+    },
     "/api/v1/v1/study/flashcards/generate": {
       "post": {
         "operationId": "FlashcardController_generateFlashcards_v1",
@@ -1335,195 +1872,6 @@
         ]
       }
     },
-    "/api/v1/v1/billing/plans": {
-      "get": {
-        "operationId": "BillingController_getPlans_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Billing"
-        ]
-      }
-    },
-    "/api/v1/v1/billing/subscription": {
-      "get": {
-        "operationId": "BillingController_getSubscription_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Billing"
-        ]
-      },
-      "delete": {
-        "operationId": "BillingController_cancel_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Billing"
-        ]
-      }
-    },
-    "/api/v1/v1/billing/subscribe": {
-      "post": {
-        "operationId": "BillingController_upgrade_v1",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpgradeSubscriptionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Billing"
-        ]
-      }
-    },
-    "/api/v1/v1/billing/checkout": {
-      "post": {
-        "operationId": "BillingController_createCheckout_v1",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Billing"
-        ]
-      }
-    },
-    "/api/v1/v1/billing/portal": {
-      "post": {
-        "operationId": "BillingController_createPortal_v1",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Billing"
-        ]
-      }
-    },
-    "/api/v1/v1/billing/summary": {
-      "get": {
-        "operationId": "BillingController_getSummary_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Billing"
-        ]
-      }
-    },
-    "/api/v1/v1/billing/invoices": {
-      "get": {
-        "operationId": "BillingController_getInvoices_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Billing"
-        ]
-      }
-    },
-    "/api/v1/v1/billing/webhook": {
-      "post": {
-        "operationId": "BillingController_handleStripeWebhook_v1",
-        "parameters": [
-          {
-            "name": "stripe-signature",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Billing"
-        ]
-      }
-    },
-    "/api/v1/v1/usage": {
-      "get": {
-        "operationId": "UsageController_getOrgUsage_v1",
-        "parameters": [
-          {
-            "name": "days",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Usage"
-        ]
-      }
-    },
-    "/api/v1/v1/usage/me": {
-      "get": {
-        "operationId": "UsageController_getMyUsage_v1",
-        "parameters": [
-          {
-            "name": "days",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Usage"
-        ]
-      }
-    },
     "/api/v1/v1/organizations": {
       "post": {
         "operationId": "OrganizationController_create_v1",
@@ -2197,6 +2545,66 @@
       "get": {
         "operationId": "AdminController_getAuditLogs_v1",
         "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/resellers": {
+      "get": {
+        "operationId": "AdminController_getResellers_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/resellers/{id}/commission": {
+      "patch": {
+        "operationId": "AdminController_updateCommission_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/resellers/{id}/suspend": {
+      "patch": {
+        "operationId": "AdminController_suspendReseller_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -3096,20 +3504,6 @@
         ]
       }
     },
-    "/api/v1/v1/internal/audit": {
-      "post": {
-        "operationId": "AuditController_logInternalAudit_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Audit"
-        ]
-      }
-    },
     "/api/v1/v1/compliance/consent": {
       "get": {
         "operationId": "ComplianceController_getConsent_v1",
@@ -3323,6 +3717,161 @@
         },
         "tags": [
           "Plugins"
+        ]
+      }
+    },
+    "/api/v1/v1/reseller/tenants/check-subdomain": {
+      "get": {
+        "operationId": "ResellerController_checkSubdomain_v1",
+        "parameters": [
+          {
+            "name": "subdomain",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reseller"
+        ]
+      }
+    },
+    "/api/v1/v1/reseller/dashboard": {
+      "get": {
+        "operationId": "ResellerController_getDashboard_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reseller"
+        ]
+      }
+    },
+    "/api/v1/v1/reseller/tenants/{id}": {
+      "get": {
+        "operationId": "ResellerController_getTenantDetails_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reseller"
+        ]
+      },
+      "delete": {
+        "operationId": "ResellerController_deleteTenant_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reseller"
+        ]
+      }
+    },
+    "/api/v1/v1/reseller/tenants": {
+      "post": {
+        "operationId": "ResellerController_createTenant_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reseller"
+        ]
+      }
+    },
+    "/api/v1/v1/reseller/tenants/{id}/config": {
+      "patch": {
+        "operationId": "ResellerController_updateConfig_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reseller"
+        ]
+      }
+    },
+    "/api/v1/v1/reseller/tenants/{id}/suspend": {
+      "patch": {
+        "operationId": "ResellerController_suspendTenant_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reseller"
+        ]
+      }
+    },
+    "/v1/api/public/tenant-config": {
+      "get": {
+        "operationId": "PublicTenantController_getTenantConfig_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PublicTenant"
         ]
       }
     },
@@ -4752,6 +5301,22 @@
         "type": "object",
         "properties": {}
       },
+      "CreateListingDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateReviewDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RejectListingDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpgradeSubscriptionDto": {
+        "type": "object",
+        "properties": {}
+      },
       "GenerateFlashcardsDto": {
         "type": "object",
         "properties": {}
@@ -4793,10 +5358,6 @@
         "properties": {}
       },
       "CompleteTaskDto": {
-        "type": "object",
-        "properties": {}
-      },
-      "UpgradeSubscriptionDto": {
         "type": "object",
         "properties": {}
       },

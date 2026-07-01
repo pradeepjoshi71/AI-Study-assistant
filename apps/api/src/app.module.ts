@@ -37,10 +37,14 @@ import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.midd
 import { UserContextMiddleware } from "./common/middleware/user-context.middleware";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { PlanGuard } from "./common/guards/plan.guard";
+import { TenantMiddleware } from "./common/middleware/tenant.middleware";
+import { TenantInterceptor } from "./common/interceptors/tenant.interceptor";
+import { TenantFeatureGuard } from "./common/guards/tenant-feature.guard";
 
 // Phase 3.0 SaaS Modules
 import { BillingModule } from "./billing/billing.module";
 import { OrganizationModule } from "./organization/organization.module";
+import { ResellerModule } from "./reseller/reseller.module";
 import { UsageModule } from "./usage/usage.module";
 import { QuotaGuardModule } from "./quota-guard/quota-guard.module";
 import { TeamsModule } from "./teams/teams.module";
@@ -210,6 +214,7 @@ export class HealthController {
     PluginRuntimeModule,
     PluginsModule,
     MarketplaceModule,
+    ResellerModule,
     PromptOptimizerModule,
     ToolGeneratorModule,
     LearningLoopModule,
@@ -235,8 +240,16 @@ export class HealthController {
       useClass: PlanGuard,
     },
     {
+      provide: APP_GUARD,
+      useClass: TenantFeatureGuard,
+    },
+    {
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TenantInterceptor,
     },
   ],
 })
@@ -247,6 +260,6 @@ export class AppModule implements NestModule {
    * gets a correlation ID for distributed tracing.
    */
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(CorrelationIdMiddleware, UserContextMiddleware).forRoutes('*');
+    consumer.apply(CorrelationIdMiddleware, UserContextMiddleware, TenantMiddleware).forRoutes('*');
   }
 }

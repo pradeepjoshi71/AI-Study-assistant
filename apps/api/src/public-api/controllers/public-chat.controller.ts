@@ -37,11 +37,14 @@ class SendMessageDto {
   mode?: 'study' | 'quiz' | 'flashcard';
 }
 
+import { RequiresFeature } from "../../common/guards/tenant-feature.guard";
+
 @ApiTags('Public Chat')
 @ApiBearerAuth('bearer')
 @UseGuards(ApiKeyGuard)
 @UseFilters(PublicApiExceptionFilter)
 @Controller({ path: 'api/public/v1/chat', version: VERSION_NEUTRAL })
+@RequiresFeature("api_access")
 export class PublicChatController {
   constructor(
     private readonly chatService: ChatService,

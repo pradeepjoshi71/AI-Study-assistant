@@ -15,11 +15,14 @@ import { AnalyticsService } from '../../modules/analytics/analytics.service';
 import { envelope } from '../common/envelope';
 import { PublicApiExceptionFilter } from '../common/public-api-exception.filter';
 
+import { RequiresFeature } from "../../common/guards/tenant-feature.guard";
+
 @ApiTags('Public Progress')
 @ApiBearerAuth('bearer')
 @UseGuards(ApiKeyGuard)
 @UseFilters(PublicApiExceptionFilter)
 @Controller({ path: 'api/public/v1/progress', version: VERSION_NEUTRAL })
+@RequiresFeature("api_access")
 export class PublicProgressController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 

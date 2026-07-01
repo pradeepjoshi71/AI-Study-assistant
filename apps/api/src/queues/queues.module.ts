@@ -53,6 +53,7 @@ const QUEUE_NAMES = [
   'api-key-usage',
   'webhook-delivery',
   'referral-reward',
+  'listing-moderation',
 ];
 
 

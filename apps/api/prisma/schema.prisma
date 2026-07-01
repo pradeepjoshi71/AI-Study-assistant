@@ -93,6 +93,11 @@ model User {
   referralReceived        Referral?              @relation("Referee")
   affiliateAccount        AffiliateAccount?
 
+  listingsCreated         Listing[]
+  purchases               Purchase[]
+  listingReviews          ListingReview[]
+  resellerAccount         ResellerAccount?
+
   @@map("users")
 }
 
@@ -656,6 +661,10 @@ model Organization {
   auditArchives        AuditArchive[]
   webhookEndpoints     WebhookEndpoint[]
   developerApps        DeveloperApp[]
+
+  listings             Listing[]
+  tenantId             String?
+  tenant               Tenant?   @relation(fields: [tenantId], references: [id])
 
   @@map("organizations")
 }
@@ -2002,4 +2011,205 @@ model AffiliateAccount {
   updatedAt       DateTime @updatedAt
 
   @@map("affiliate_accounts")
+}
+
+// ─── MARKETPLACE / CREATOR ECOSYSTEM ──────────────────────────────────────────
+
+enum ListingType {
+  QUIZ_SET
+  FLASHCARD_SET
+  STUDY_PACK
+}
+
+enum ListingStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  REJECTED
+  UNPUBLISHED
+}
+
+enum ListingItemType {
+  QUIZ
+  FLASHCARD
+}
+
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  REFUNDED
+}
+
+enum CreatorPayoutStatus {
+  HELD
+  PENDING
+  PAID
+  FAILED
+}
+
+model Listing {
+  id               String        @id @default(uuid())
+  orgId            String
+  organization     Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creatorId        String
+  creator          User          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  title            String
+  description      String
+  type             ListingType
+  price            Int
+  status           ListingStatus
+  category         String
+  tags             String[]
+  previewItemCount Int           @default(3)
+  totalItems       Int
+  salesCount       Int           @default(0)
+  rating           Float         @default(0.0)
+  createdAt        DateTime      @default(now())
+
+  items            ListingItem[]
+  purchases        Purchase[]
+  reviews          ListingReview[]
+  payouts          CreatorPayout[]
+
+  @@index([status, category, rating, salesCount])
+  @@map("listings")
+}
+
+model ListingItem {
+  id         String          @id @default(uuid())
+  listingId  String
+  listing    Listing         @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  itemId     String
+  itemType   ListingItemType
+  orderIndex Int
+
+  @@unique([listingId, itemId])
+  @@map("listing_items")
+}
+
+model Purchase {
+  id              String         @id @default(uuid())
+  buyerId         String
+  buyer           User           @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  listingId       String
+  listing         Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  amountPaid      Int
+  stripePaymentId String         @unique
+  status          PurchaseStatus
+  createdAt       DateTime       @default(now())
+  payouts         CreatorPayout[]
+
+  @@index([buyerId, listingId])
+  @@map("purchases")
+}
+
+model ListingReview {
+  id        String   @id @default(uuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@unique([listingId, userId])
+  @@map("listing_reviews")
+}
+
+model CreatorPayout {
+  id             String              @id @default(uuid())
+  listingId      String
+  listing        Listing             @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  purchaseId     String              @unique
+  purchase       Purchase            @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  creatorAmount  Int
+  platformAmount Int
+  status         CreatorPayoutStatus
+  holdUntil      DateTime
+  paidAt         DateTime?
+
+  @@map("creator_payouts")
+}
+
+model ResellerAccount {
+  userId          String   @unique
+  stripeConnectId String?
+  commissionRate  Float    @default(0.7)
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reseller_accounts")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
+
+enum TenantBillingStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+model TenantPlan {
+  id               String   @id @default(uuid())
+  name             String
+  maxOrgs          Int
+  maxUsersPerOrg   Int
+  maxDocsPerOrg    Int
+  aiTokensPerMonth Int
+  price            Int      // cents
+  tenants          Tenant[]
+
+  @@map("tenant_plans")
+}
+
+model Tenant {
+  id           String       @id @default(uuid())
+  resellerId   String
+  name         String
+  subdomain    String       @unique // lowercase is enforced by business logic
+  customDomain String?      @unique
+  status       TenantStatus
+  planId       String
+  plan         TenantPlan   @relation(fields: [planId], references: [id])
+  trialEndsAt  DateTime?
+  createdAt    DateTime     @default(now())
+
+  config        TenantConfig?
+  billing       TenantBilling?
+  organizations Organization[]
+
+  @@index([subdomain])
+  @@index([customDomain])
+  @@index([resellerId])
+  @@map("tenants")
+}
+
+model TenantConfig {
+  tenantId       String   @unique
+  logoUrl        String?
+  primaryColor   String   @default("#6366f1")
+  secondaryColor String   @default("#8b5cf6")
+  fontFamily     String   @default("Inter")
+  appName        String
+  supportEmail   String
+  features       Json     @default("{\"marketplace\":false,\"voice\":false,\"groups\":true,\"api_access\":false,\"custom_branding\":false}")
+  customCss      String?
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_configs")
+}
+
+model TenantBilling {
+  tenantId             String              @unique
+  stripeSubscriptionId String
+  status               TenantBillingStatus
+  currentPeriodEnd     DateTime
+  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_billings")
 }

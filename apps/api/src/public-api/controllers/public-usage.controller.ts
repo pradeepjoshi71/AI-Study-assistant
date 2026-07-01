@@ -9,11 +9,14 @@ import { envelope } from '../common/envelope';
 import { PublicApiExceptionFilter } from '../common/public-api-exception.filter';
 import { VERSION_NEUTRAL } from '@nestjs/common';
 
+import { RequiresFeature } from "../../common/guards/tenant-feature.guard";
+
 @ApiTags('Public Usage')
 @ApiBearerAuth('bearer')
 @UseGuards(ApiKeyOrJwtAuthGuard)
 @UseFilters(PublicApiExceptionFilter)
 @Controller({ path: 'api/public/v1/usage', version: VERSION_NEUTRAL })
+@RequiresFeature("api_access")
 export class PublicUsageController {
   constructor(private readonly prisma: PrismaService) {}
 

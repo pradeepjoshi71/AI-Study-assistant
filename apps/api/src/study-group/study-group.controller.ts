@@ -17,8 +17,11 @@ import { userContextStorage } from '../common/context/user-context';
 
 import { MobileGateway } from '../auth/mobile.gateway';
 
+import { RequiresFeature } from "../common/guards/tenant-feature.guard";
+
 @UseGuards(JwtAuthGuard)
 @Controller('groups')
+@RequiresFeature("groups")
 export class StudyGroupController {
   constructor(
     private readonly studyGroupService: StudyGroupService,

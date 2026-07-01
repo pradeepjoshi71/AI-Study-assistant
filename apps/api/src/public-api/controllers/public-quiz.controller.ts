@@ -22,11 +22,14 @@ import { GenerateQuizDto, SubmitQuizDto } from '../../modules/quiz/quiz.types';
 import { envelope } from '../common/envelope';
 import { PublicApiExceptionFilter } from '../common/public-api-exception.filter';
 
+import { RequiresFeature } from "../../common/guards/tenant-feature.guard";
+
 @ApiTags('Public Quiz')
 @ApiBearerAuth('bearer')
 @UseGuards(ApiKeyGuard)
 @UseFilters(PublicApiExceptionFilter)
 @Controller({ path: 'api/public/v1/quizzes', version: VERSION_NEUTRAL })
+@RequiresFeature("api_access")
 export class PublicQuizController {
   constructor(private readonly quizService: QuizService) {}
 

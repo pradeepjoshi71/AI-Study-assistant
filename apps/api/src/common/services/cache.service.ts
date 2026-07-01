@@ -171,5 +171,9 @@ export class CacheService {
   static rateLimitKey(userId: string, endpoint: string): string {
     return `rate:${userId}:${endpoint}`;
   }
+
+  static purchaseKey(buyerId: string, listingId: string): string {
+    return `purchase:${buyerId}:${listingId}`;
+  }
 }
 

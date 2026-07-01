@@ -5,8 +5,11 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { RequiresFeature } from "../../common/guards/tenant-feature.guard";
+
 @ApiTags('Public OpenAPI Specification')
 @Controller({ path: 'api/public/v1/openapi.json', version: VERSION_NEUTRAL })
+@RequiresFeature("api_access")
 export class PublicOpenApiController {
   @Get()
   @Header('Content-Type', 'application/json')

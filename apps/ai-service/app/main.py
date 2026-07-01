@@ -405,6 +405,18 @@ def create_collection_snapshot(name: str):
         logger.error(f"Manual Qdrant snapshot failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+class EmbedRequest(BaseModel):
+    text: str
+
+@app.post("/ai/embeddings")
+def get_query_embedding(req: EmbedRequest):
+    try:
+        vec = vector_search.get_embedding(req.text, is_query=True)
+        return {"embedding": vec}
+    except Exception as e:
+        logger.error(f"Failed to generate embedding via FastAPI: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 def read_root():
     return {

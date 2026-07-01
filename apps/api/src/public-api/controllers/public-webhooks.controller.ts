@@ -29,11 +29,14 @@ class CreateWebhookDto {
   events!: string[];
 }
 
+import { RequiresFeature } from "../../common/guards/tenant-feature.guard";
+
 @ApiTags('Public Webhooks')
 @ApiBearerAuth('bearer')
 @UseGuards(ApiKeyGuard)
 @UseFilters(PublicApiExceptionFilter)
 @Controller({ path: 'api/public/v1/webhooks', version: VERSION_NEUTRAL })
+@RequiresFeature("api_access")
 export class PublicWebhooksController {
   constructor(private readonly webhooksService: WebhooksService) {}
 

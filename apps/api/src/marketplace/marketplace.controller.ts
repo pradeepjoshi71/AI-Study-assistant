@@ -9,8 +9,10 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  Query,
 } from '@nestjs/common';
 import { MarketplaceService } from './marketplace.service';
+import { ListingType } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { IsString, IsObject, IsOptional, IsNumber, Min, Max } from 'class-validator';
@@ -47,8 +49,11 @@ export class RatePluginDto {
   review?: string;
 }
 
+import { RequiresFeature } from "../common/guards/tenant-feature.guard";
+
 @Controller()
 @UseGuards(JwtAuthGuard)
+@RequiresFeature("marketplace")
 export class MarketplaceController {
   constructor(private readonly marketplaceService: MarketplaceService) {}
 
@@ -133,4 +138,68 @@ export class MarketplaceController {
       review: dto.review,
     });
   }
+
+  // ── GET /marketplace ────────────────────────────────────────────────────────
+
+  @Get('marketplace')
+  async getMarketplace(
+    @Query('type') type?: ListingType,
+    @Query('category') category?: string,
+    @Query('priceMin') priceMin?: string,
+    @Query('priceMax') priceMax?: string,
+    @Query('ratingMin') ratingMin?: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 10;
+    const parsedPriceMin = priceMin ? parseInt(priceMin, 10) : undefined;
+    const parsedPriceMax = priceMax ? parseInt(priceMax, 10) : undefined;
+    const parsedRatingMin = ratingMin ? parseFloat(ratingMin) : undefined;
+
+    return this.marketplaceService.getListings(
+      {
+        type,
+        category,
+        priceMin: parsedPriceMin,
+        priceMax: parsedPriceMax,
+        ratingMin: parsedRatingMin,
+      },
+      {
+        limit: parsedLimit,
+        cursor,
+      },
+    );
+  }
+
+  // ── GET /marketplace/search?q= ──────────────────────────────────────────────
+
+  @Get('marketplace/search')
+  async searchMarketplace(@Query('q') q?: string) {
+    if (!q) {
+      return [];
+    }
+    return this.marketplaceService.searchListings(q);
+  }
+
+  // ── GET /marketplace/creator/stats ──────────────────────────────────────────
+
+  @Get('marketplace/creator/stats')
+  async getStats(@CurrentUser() user: any) {
+    return this.marketplaceService.getCreatorStats(user.id);
+  }
+
+  // ── GET /marketplace/creator/payouts ────────────────────────────────────────
+
+  @Get('marketplace/creator/payouts')
+  async getPayouts(@CurrentUser() user: any) {
+    return this.marketplaceService.getCreatorPayouts(user.id);
+  }
+
+  // ── GET /marketplace/purchases ──────────────────────────────────────────────
+
+  @Get('marketplace/purchases')
+  async getPurchases(@CurrentUser() user: any) {
+    return this.marketplaceService.getPurchases(user.id);
+  }
 }
+
