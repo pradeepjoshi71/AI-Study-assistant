@@ -1,4 +1,4 @@
-import { Module, Get, Controller, MiddlewareConsumer, NestModule } from "@nestjs/common";
+import { Module, Get, Controller, MiddlewareConsumer, NestModule, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ThrottlerModule } from "@nestjs/throttler";
@@ -49,10 +49,13 @@ import { AdminModule } from "./admin/admin.module";
 import { PricingModule } from "./pricing/pricing.module";
 import { FeatureFlagsModule } from "./feature-flags/feature-flags.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
+import { ReferralModule } from "./referral/referral.module";
 
 // Phase 3.1 Enterprise Security Modules
 import { SsoModule } from "./sso/sso.module";
 import { AuditModule } from "./audit/audit.module";
+import { RetentionModule } from "./retention/retention.module";
+import { ComplianceModule } from "./compliance/compliance.module";
 import { SecurityGuardModule } from "./security-guard/security-guard.module";
 
 // Phase 3.2 AI Agent Marketplace Modules
@@ -73,6 +76,11 @@ import { AiOsModule } from "./ai-os/ai-os.module";
 import { MetricsModule } from "./platform/metrics/metrics.module";
 import { GamificationModule } from "./gamification/gamification.module";
 
+// Phase 5.0 Exam Engine
+import { ExamModule } from "./exam/exam.module";
+import { StudyGroupModule } from "./study-group/study-group.module";
+import { ApiKeyModule } from "./api-key/api-key.module";
+import { PublicApiModule } from "./public-api/public-api.module";
 
 @Controller("health")
 export class HealthController {
@@ -92,43 +100,34 @@ export class HealthController {
     let databaseStatus = "UP";
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-    } catch { databaseStatus = "DOWN"; }
+    } catch {
+      databaseStatus = "DOWN";
+    }
 
     // 2. Redis
     let redisStatus = "UP";
     try {
       await this.redis.getClient().ping();
-    } catch { redisStatus = "DOWN"; }
+    } catch {
+      redisStatus = "DOWN";
+    }
 
-    // 3. Qdrant
-    let qdrantStatus = "UP";
-    try {
-      const qdrantHost = this.config.get<string>('QDRANT_HOST', 'localhost');
-      const qdrantPort = this.config.get<number>('QDRANT_PORT', 6333);
-      const res = await fetch(`http://${qdrantHost}:${qdrantPort}/healthz`, { signal: AbortSignal.timeout(2000) });
-      if (!res.ok) qdrantStatus = "DOWN";
-    } catch { qdrantStatus = "DOWN"; }
+    const allUp = databaseStatus === "UP" && redisStatus === "UP";
 
-    // 4. FastAPI AI Service
-    let aiServiceStatus = "UP";
-    try {
-      const res = await fetch(`${this.aiServiceUrl}/health`, { signal: AbortSignal.timeout(2000) });
-      if (!res.ok) aiServiceStatus = "DOWN";
-    } catch { aiServiceStatus = "DOWN"; }
-
-    const allUp = [databaseStatus, redisStatus, qdrantStatus, aiServiceStatus].every(s => s === "UP");
-
-    return {
+    const payload = {
       status: allUp ? "ok" : "degraded",
-      details: {
-        database: databaseStatus,
-        redis: redisStatus,
-        qdrant: qdrantStatus,
-        aiService: aiServiceStatus,
-      },
+      db: databaseStatus,
+      redis: redisStatus,
       timestamp: new Date().toISOString(),
     };
+
+    if (!allUp) {
+      throw new ServiceUnavailableException(payload);
+    }
+
+    return payload;
   }
+
 }
 
 @Module({
@@ -158,6 +157,11 @@ export class HealthController {
             name: "premium",
             ttl: 60000,
             limit: 200,
+          },
+          {
+            name: "admin",
+            ttl: 60000,
+            limit: 30,
           },
         ],
       }),
@@ -197,8 +201,11 @@ export class HealthController {
     PricingModule,
     FeatureFlagsModule,
     WebhooksModule,
+    ReferralModule,
     SsoModule,
     AuditModule,
+    RetentionModule,
+    ComplianceModule,
     SecurityGuardModule,
     PluginRuntimeModule,
     PluginsModule,
@@ -211,6 +218,11 @@ export class HealthController {
     // Phase 4.0 — Global Ecosystem Metrics
     MetricsModule,
     GamificationModule,
+    // Phase 5.0 — Exam Engine
+    ExamModule,
+    StudyGroupModule,
+    ApiKeyModule,
+    PublicApiModule,
   ],
   controllers: [HealthController],
   providers: [

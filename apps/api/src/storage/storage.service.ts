@@ -6,6 +6,8 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  PutBucketVersioningCommand,
+  PutBucketLifecycleConfigurationCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Readable } from "stream";
@@ -115,6 +117,28 @@ export class StorageService {
     return { url, key, bucket: this.bucket };
   }
 
+  /**
+   * Upload a raw buffer to Minio.
+   */
+  async uploadBuffer(
+    key: string,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<{ url: string; key: string; bucket: string }> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        ContentLength: buffer.length,
+      }),
+    );
+    const url = `${this.publicEndpoint}/${this.bucket}/${key}`;
+    this.logger.debug(`Uploaded Buffer: ${key} (${buffer.length} bytes)`);
+    return { url, key, bucket: this.bucket };
+  }
+
   // ── Signed URL ────────────────────────────────────────────────────────────
 
   /**
@@ -188,5 +212,32 @@ export class StorageService {
 
   get bucketName(): string {
     return this.bucket;
+  }
+
+  async configureCompliance(): Promise<void> {
+    try {
+      await this.client.send(new PutBucketVersioningCommand({
+        Bucket: this.bucket,
+        VersioningConfiguration: { Status: 'Enabled' },
+      }));
+      this.logger.log(`Minio bucket versioning enabled successfully.`);
+
+      await this.client.send(new PutBucketLifecycleConfigurationCommand({
+        Bucket: this.bucket,
+        LifecycleConfiguration: {
+          Rules: [
+            {
+              ID: 'block-delete-compliance',
+              Status: 'Enabled',
+              Filter: { Prefix: 'audits/' },
+              NoncurrentVersionExpiration: { NoncurrentDays: 36500 },
+            }
+          ]
+        }
+      }));
+      this.logger.log(`Minio compliance lifecycle rules applied successfully.`);
+    } catch (err: any) {
+      this.logger.error(`Failed to configure Minio compliance rules: ${err.message}`);
+    }
   }
 }

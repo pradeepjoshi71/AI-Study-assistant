@@ -1,0 +1,272 @@
+name: Deploy Production
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: true
+
+jobs:
+  deploy-primary:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    strategy:
+      matrix:
+        region: [us-east]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: SSH Deploy us-east
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_SSH_HOST }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /app
+
+            # 1. Save previous SHA for rollback recovery
+            if [ -f .current_sha ]; then
+              cp .current_sha .prev_sha
+            else
+              echo "latest" > .prev_sha
+            fi
+            echo "sha-${{ github.sha }}" > .current_sha
+
+            # 2. Database Backup (pg_dump) to Minio before migrating
+            source .env
+            BACKUP_NAME="prod_backup_$(date +%Y%m%d_%H%M%S).sql"
+            echo "Starting production database backup: $BACKUP_NAME"
+            
+            # Exec pg_dump inside db container
+            docker compose exec -T db pg_dump -U "$DB_USER" "$DB_NAME" > "/tmp/$BACKUP_NAME"
+            
+            # Copy to Minio backup bucket using mc tool configured in compose
+            docker compose exec -T mc mc cp "/tmp/$BACKUP_NAME" "local/$MINIO_BACKUP_BUCKET/backups/$BACKUP_NAME" || true
+            rm -f "/tmp/$BACKUP_NAME"
+
+            # 3. Pull new images from GHCR (using existing SHA tag, no rebuild)
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose pull
+
+            # 4. Execute database migration (only in us-east / primary)
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose run --rm api npx prisma migrate deploy
+
+            # 5. Define healthcheck validator function
+            check_health() {
+              local url=$1
+              local name=$2
+              echo "Verifying health check for $name at $url..."
+              for i in {1..3}; do
+                if curl -f "$url" >/dev/null 2>&1; then
+                  echo "$name is healthy!"
+                  return 0
+                fi
+                echo "Attempt $i failed. Retrying in 30 seconds..."
+                sleep 30
+              done
+              return 1
+            }
+
+            # 6. Sequential Deployment with Health Check Gates
+            echo "Deploying NestJS API service..."
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose up -d --no-deps api
+            if ! check_health "http://localhost:3001/api/v1/health" "API (NestJS)"; then
+              echo "API failed health check! Reverting deploy..."
+              ROLLBACK_TAG=$(cat .prev_sha)
+              IMAGE_TAG="$ROLLBACK_TAG" docker compose up -d --no-deps api ai web
+              cp .prev_sha .current_sha
+              exit 1
+            fi
+
+            echo "Deploying FastAPI AI service..."
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose up -d --no-deps ai
+            if ! check_health "http://localhost:8000/health" "AI (FastAPI)"; then
+              echo "AI failed health check! Reverting deploy..."
+              ROLLBACK_TAG=$(cat .prev_sha)
+              IMAGE_TAG="$ROLLBACK_TAG" docker compose up -d --no-deps api ai web
+              cp .prev_sha .current_sha
+              exit 1
+            fi
+
+            echo "Deploying Next.js Web service..."
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose up -d --no-deps web
+            if ! check_health "http://localhost:3000" "Web (Next.js)"; then
+              echo "Web failed health check! Reverting deploy..."
+              ROLLBACK_TAG=$(cat .prev_sha)
+              IMAGE_TAG="$ROLLBACK_TAG" docker compose up -d --no-deps api ai web
+              cp .prev_sha .current_sha
+              exit 1
+            fi
+
+            echo "Primary deployment completed successfully!"
+            rm -f .prev_sha
+
+      - name: Region Health Check
+        run: |
+          DOMAIN="us-east.study-assistant.com"
+          echo "Checking external health of region ${{ matrix.region }} at https://$DOMAIN/health..."
+          curl -f "https://$DOMAIN/health"
+
+      - name: Rollback Region on Health Check Failure
+        if: failure()
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_SSH_HOST }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /app
+            if [ -f .prev_sha ]; then
+              ROLLBACK_TAG=$(cat .prev_sha)
+              echo "Rolling back to $ROLLBACK_TAG..."
+              IMAGE_TAG="$ROLLBACK_TAG" docker compose up -d --no-deps api ai web
+              cp .prev_sha .current_sha
+            else
+              echo "No rollback SHA found!"
+            fi
+
+      - name: Notify Slack Region Status
+        if: always()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_TITLE: 'Production Deployment Status - ${{ matrix.region }}'
+          SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}
+          SLACK_MESSAGE: |
+            *Region:* ${{ matrix.region }} (Primary)
+            *Repository:* ${{ github.repository }}
+            *Tag:* ${{ github.ref_name }}
+            *Commit SHA:* ${{ github.sha }}
+            *Deployer/Approver:* ${{ github.actor }}
+            *Status:* ${{ job.status == 'success' && 'SUCCESS 🚀' || 'FAILED ⚠️' }}
+            *Details:* Primary region deployment executed database migrations and updated services.
+
+  deploy-secondary:
+    needs: [deploy-primary]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    strategy:
+      matrix:
+        region: [eu-west]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: SSH Deploy eu-west
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_SSH_HOST_EU_WEST }}
+          username: ${{ secrets.PROD_SSH_USER_EU_WEST }}
+          key: ${{ secrets.PROD_SSH_KEY_EU_WEST }}
+          script: |
+            cd /app
+
+            # 1. Save previous SHA for rollback recovery
+            if [ -f .current_sha ]; then
+              cp .current_sha .prev_sha
+            else
+              echo "latest" > .prev_sha
+            fi
+            echo "sha-${{ github.sha }}" > .current_sha
+
+            # 2. Pull new images from GHCR
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose pull
+
+            # Note: DB migration is bypassed in secondary region.
+
+            # 3. Define healthcheck validator function
+            check_health() {
+              local url=$1
+              local name=$2
+              echo "Verifying health check for $name at $url..."
+              for i in {1..3}; do
+                if curl -f "$url" >/dev/null 2>&1; then
+                  echo "$name is healthy!"
+                  return 0
+                fi
+                echo "Attempt $i failed. Retrying in 30 seconds..."
+                sleep 30
+              done
+              return 1
+            }
+
+            # 4. Sequential Deployment with Health Check Gates
+            echo "Deploying NestJS API service..."
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose up -d --no-deps api
+            if ! check_health "http://localhost:3001/api/v1/health" "API (NestJS)"; then
+              echo "API failed health check! Reverting deploy..."
+              ROLLBACK_TAG=$(cat .prev_sha)
+              IMAGE_TAG="$ROLLBACK_TAG" docker compose up -d --no-deps api ai web
+              cp .prev_sha .current_sha
+              exit 1
+            fi
+
+            echo "Deploying FastAPI AI service..."
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose up -d --no-deps ai
+            if ! check_health "http://localhost:8000/health" "AI (FastAPI)"; then
+              echo "AI failed health check! Reverting deploy..."
+              ROLLBACK_TAG=$(cat .prev_sha)
+              IMAGE_TAG="$ROLLBACK_TAG" docker compose up -d --no-deps api ai web
+              cp .prev_sha .current_sha
+              exit 1
+            fi
+
+            echo "Deploying Next.js Web service..."
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose up -d --no-deps web
+            if ! check_health "http://localhost:3000" "Web (Next.js)"; then
+              echo "Web failed health check! Reverting deploy..."
+              ROLLBACK_TAG=$(cat .prev_sha)
+              IMAGE_TAG="$ROLLBACK_TAG" docker compose up -d --no-deps api ai web
+              cp .prev_sha .current_sha
+              exit 1
+            fi
+
+            echo "Secondary deployment completed successfully!"
+            rm -f .prev_sha
+
+      - name: Region Health Check
+        run: |
+          DOMAIN="eu-west.study-assistant.com"
+          echo "Checking external health of region ${{ matrix.region }} at https://$DOMAIN/health..."
+          curl -f "https://$DOMAIN/health"
+
+      - name: Rollback Region on Health Check Failure
+        if: failure()
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_SSH_HOST_EU_WEST }}
+          username: ${{ secrets.PROD_SSH_USER_EU_WEST }}
+          key: ${{ secrets.PROD_SSH_KEY_EU_WEST }}
+          script: |
+            cd /app
+            if [ -f .prev_sha ]; then
+              ROLLBACK_TAG=$(cat .prev_sha)
+              echo "Rolling back to $ROLLBACK_TAG..."
+              IMAGE_TAG="$ROLLBACK_TAG" docker compose up -d --no-deps api ai web
+              cp .prev_sha .current_sha
+            else
+              echo "No rollback SHA found!"
+            fi
+
+      - name: Notify Slack Region Status
+        if: always()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_TITLE: 'Production Deployment Status - ${{ matrix.region }}'
+          SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}
+          SLACK_MESSAGE: |
+            *Region:* ${{ matrix.region }} (Secondary)
+            *Repository:* ${{ github.repository }}
+            *Tag:* ${{ github.ref_name }}
+            *Commit SHA:* ${{ github.sha }}
+            *Deployer/Approver:* ${{ github.actor }}
+            *Status:* ${{ job.status == 'success' && 'SUCCESS 🚀' || 'FAILED ⚠️' }}
+            *Details:* Secondary region deployment updated services without executing DB migrations.

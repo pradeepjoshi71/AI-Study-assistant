@@ -2,15 +2,14 @@
 # Run build context from root folder of monorepo:
 # docker build -t study-assistant-api -f apps/api/Dockerfile .
 
-# --- Stage 1: Dependency Installation & Build ---
+# --- Stage 1: Build Application ---
 FROM node:20-alpine AS builder
 
 WORKDIR /usr/src/app
 
-# Install standard build dependencies if any native node modules exist
 RUN apk add --no-cache libc6-compat
 
-# Copy package lockfiles and workspace configs
+# Copy workspace configs and packages
 COPY package*.json ./
 COPY packages/shared-config ./packages/shared-config
 COPY packages/shared-types ./packages/shared-types
@@ -19,47 +18,57 @@ COPY apps/api ./apps/api
 # Install dependencies (including devDependencies)
 RUN npm ci
 
-# Generate Prisma Client (critical before compiling Typescript code)
+# Generate Prisma Client
 RUN cd apps/api && npx prisma generate
 
 # Build shared types and NestJS application
 RUN npm run build -w @study-assistant/shared-types
 RUN npm run build -w @study-assistant/api
 
-# --- Stage 2: Production Execution Image ---
+# --- Stage 2: Install Production Dependencies Only ---
+FROM node:20-alpine AS deps
+
+WORKDIR /usr/src/app
+
+RUN apk add --no-cache libc6-compat
+
+COPY package*.json ./
+COPY packages/shared-config ./packages/shared-config
+COPY packages/shared-types ./packages/shared-types
+COPY apps/api/package*.json ./apps/api/
+
+# Install only production dependencies
+RUN npm ci --omit=dev
+
+# Regenerate Prisma Client in production node_modules
+RUN cd apps/api && npx prisma generate
+
+# --- Stage 3: Runner ---
 FROM node:20-alpine AS runner
 
 WORKDIR /usr/src/app
 
-# Install PM2 globally
-RUN npm install -g pm2
-
-# Set production environment variables
 ENV NODE_ENV=production
 
-# Run as non-root user for security (principle of least privilege)
+# Run as non-root user for security
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nestjs
 
-# Copy package configurations and node_modules from builder
-COPY package*.json ./
-COPY --from=builder /usr/src/app/node_modules ./node_modules
-COPY --from=builder /usr/src/app/packages/shared-types ./packages/shared-types
-COPY --from=builder /usr/src/app/apps/api ./apps/api
+# Copy production node_modules
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY --from=deps /usr/src/app/packages/shared-types/node_modules ./packages/shared-types/node_modules
 
-# Change ownership to non-root user
+# Copy dist built artifacts
+COPY --from=builder /usr/src/app/apps/api/dist ./apps/api/dist
+COPY --from=builder /usr/src/app/apps/api/package*.json ./apps/api/
+COPY --from=builder /usr/src/app/packages/shared-types/dist ./packages/shared-types/dist
+COPY --from=builder /usr/src/app/packages/shared-types/package*.json ./packages/shared-types/
+
+# Set ownership
 RUN chown -R nestjs:nodejs /usr/src/app
 USER nestjs
 
-# OCI image labels for audit trail
-LABEL org.opencontainers.image.source="https://github.com/YOUR_ORG/AI-Study-assistant" \
-      org.opencontainers.image.title="ai-study-assistant-api" \
-      org.opencontainers.image.description="NestJS API service"
-
 EXPOSE 3001
 
-# ECS health check — ALB uses its own but this is used by docker health
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/v1/health || exit 1
+CMD ["node", "apps/api/dist/main.js"]
 
-CMD ["pm2-runtime", "start", "apps/api/ecosystem.config.js"]

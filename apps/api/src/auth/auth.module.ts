@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 import { PassportModule } from "@nestjs/passport";
 import { JwtModule } from "@nestjs/jwt";
 import { ConfigModule } from "@nestjs/config";
+import { BullModule } from "@nestjs/bullmq";
+import { StorageModule } from "../storage/storage.module";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { UsersModule } from "../users/users.module";
@@ -23,6 +25,11 @@ import { VoiceController } from "./voice.controller";
     ConfigModule,
     UsersModule,
     RedisModule,
+    StorageModule,
+    BullModule.registerQueue(
+      { name: "voice-processing" },
+      { name: "document-processing" },
+    ),
   ],
   controllers: [AuthController, MobileAuthController, MobileController, VoiceController],
   providers: [AuthService, MobileAuthService, JwtStrategy, JwtAuthGuard, MobileJwtAuthGuard, RolesGuard, MobileGateway],

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Res, Param, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Res, Param, UseGuards, UseInterceptors } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ChatService, SendChatDto } from './chat.service';
@@ -6,9 +6,12 @@ import { ConversationService } from '../conversation/conversation.service';
 import { Response } from 'express';
 import { RateLimitGuard } from '../common/guards/rate-limit.guard';
 import { RateLimit } from '../common/decorators/rate-limit.decorator';
+import { Audit } from '../audit/decorators/audit.decorator';
+import { AuditInterceptor } from '../audit/interceptors/audit.interceptor';
 
 @UseGuards(JwtAuthGuard)
 @Controller('chat')
+@UseInterceptors(AuditInterceptor)
 export class ChatController {
   constructor(
     private chatService: ChatService,
@@ -16,6 +19,7 @@ export class ChatController {
   ) {}
 
   @Post('send')
+  @Audit('chat.created', 'chat')
   @UseGuards(RateLimitGuard)
   @RateLimit({ limit: 20, window: 60 })
   async sendChat(

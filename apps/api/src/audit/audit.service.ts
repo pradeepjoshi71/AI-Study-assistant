@@ -2,9 +2,13 @@ import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { ActorType } from '@prisma/client';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 export interface AuditLogParams {
   organizationId?: string;
+  userId?: string;
   actorId?: string;
   actorType: 'user' | 'admin' | 'system' | 'api_key';
   action: string;
@@ -14,6 +18,13 @@ export interface AuditLogParams {
   ipAddress?: string;
   userAgent?: string;
   correlationId?: string;
+}
+
+function mapActorType(type: string): ActorType {
+  const lower = type.toLowerCase();
+  if (lower === 'admin') return ActorType.ADMIN;
+  if (lower === 'system' || lower === 'api_key') return ActorType.SYSTEM;
+  return ActorType.USER;
 }
 
 export interface SecurityEventParams {
@@ -36,6 +47,7 @@ export class AuditService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @InjectQueue('audit') private readonly auditQueue: Queue,
   ) {
     const accessKeyId = this.config.get<string>('AWS_ACCESS_KEY_ID');
     const secretAccessKey = this.config.get<string>('AWS_SECRET_ACCESS_KEY');
@@ -51,27 +63,24 @@ export class AuditService {
   }
 
   /**
-   * Log an operational event to the immutable AuditLog table
+   * Log an operational event to the immutable AuditLog table (dispatched asynchronously via BullMQ)
    */
   async log(params: AuditLogParams) {
     try {
-      const logEntry = await this.prisma.auditLog.create({
-        data: {
-          organizationId: params.organizationId ?? null,
-          actorId: params.actorId ?? 'system',
-          actorType: params.actorType,
-          action: params.action,
-          resourceType: params.resourceType ?? null,
-          resourceId: params.resourceId ?? null,
-          correlationId: params.correlationId ?? null,
-          metadata: params.metadata ?? {},
-          ipAddress: params.ipAddress ?? null,
-          userAgent: params.userAgent ?? null,
-        },
+      await this.auditQueue.add('log-entry', {
+        orgId: params.organizationId ?? null,
+        userId: params.userId ?? null,
+        actorId: params.actorId ?? 'system',
+        actorType: params.actorType,
+        action: params.action,
+        resourceType: params.resourceType ?? 'unknown',
+        resourceId: params.resourceId ?? null,
+        metadata: params.metadata ?? {},
+        ip: params.ipAddress ?? null,
+        userAgent: params.userAgent ?? null,
       });
-      return logEntry;
     } catch (err: any) {
-      this.logger.error(`Failed to write audit log entry: ${err.message}`);
+      this.logger.error(`Failed to dispatch audit log event to BullMQ: ${err.message}`);
     }
   }
 
@@ -109,7 +118,7 @@ export class AuditService {
    */
   async exportAuditLogsToS3(organizationId: string): Promise<string> {
     const logs = await this.prisma.auditLog.findMany({
-      where: { organizationId },
+      where: { orgId: organizationId },
       orderBy: { createdAt: 'desc' },
     });
 

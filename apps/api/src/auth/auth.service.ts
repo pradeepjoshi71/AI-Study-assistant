@@ -14,6 +14,7 @@ import { LoginDto } from "./dtos/login.dto";
 import * as bcrypt from "bcrypt";
 
 import { XPService } from "../gamification/xp.service";
+import { RedisService } from "../redis/redis.service";
 
 @Injectable()
 export class AuthService {
@@ -26,6 +27,7 @@ export class AuthService {
     private configService: ConfigService,
     private prisma: PrismaService,
     private xpService: XPService,
+    private redisService: RedisService,
   ) {
     this.accessSecret = this.configService.get<string>(
       "JWT_ACCESS_SECRET",
@@ -37,7 +39,7 @@ export class AuthService {
     );
   }
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, visitorId?: string) {
     const existingUser = await this.usersService.findByEmail(dto.email);
     if (existingUser) {
       throw new ConflictException("A user with this email already exists");
@@ -50,6 +52,31 @@ export class AuthService {
       name: dto.name,
       role: dto.role,
     });
+
+    if (visitorId) {
+      try {
+        const redis = this.redisService.getClient();
+        const code = await redis.get(`ref:click:${visitorId}`);
+        if (code) {
+          const referralCode = await this.prisma.referralCode.findUnique({
+            where: { code },
+          });
+          if (referralCode) {
+            await this.prisma.referral.create({
+              data: {
+                referrerId: referralCode.userId,
+                refereeId: user.id,
+                code,
+                status: "SIGNED_UP",
+              },
+            });
+            await redis.del(`ref:click:${visitorId}`);
+          }
+        }
+      } catch (err: any) {
+        console.warn(`Failed to process referral signup for visitor ${visitorId}:`, err.message);
+      }
+    }
 
     const result = { ...user };
     delete (result as any).password;
@@ -201,8 +228,9 @@ export class AuthService {
     }
 
     // 2. Sign access & refresh tokens
+    const systemRole = userRecord?.systemRole || 'USER';
     const accessToken = this.jwtService.sign(
-      { sub: userId, email, tier, orgId },
+      { sub: userId, email, tier, orgId, systemRole },
       { secret: this.accessSecret, expiresIn: "15m" },
     );
 

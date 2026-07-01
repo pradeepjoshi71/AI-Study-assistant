@@ -158,8 +158,9 @@ export class MobileAuthService {
     const orgId = membership?.orgId || undefined;
 
     // Sign tokens
+    const systemRole = userRecord?.systemRole || "USER";
     const accessToken = this.jwtService.sign(
-      { sub: userId, email, tier, orgId, deviceId },
+      { sub: userId, email, tier, orgId, deviceId, systemRole },
       { secret: this.accessSecret, expiresIn: "15m" },
     );
 

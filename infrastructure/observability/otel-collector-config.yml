@@ -98,21 +98,42 @@ exporters:
     log_group_name: "/aws/otel/traces"
     log_stream_name: "${SERVICE_NAME}-traces"
 
-  # Debug output in development
-  debug:
-    verbosity: basic
+  # Grafana Cloud Prometheus Remote Write
+  prometheusremotewrite:
+    endpoint: "${GRAFANA_CLOUD_PROM_ENDPOINT}"
+    headers:
+      Authorization: "Bearer ${GRAFANA_CLOUD_PROM_TOKEN}"
+    external_labels:
+      region: "${REGION}"
+
+  # Grafana Cloud Loki
+  loki:
+    endpoint: "${GRAFANA_CLOUD_LOKI_ENDPOINT}"
+    headers:
+      Authorization: "${GRAFANA_CLOUD_LOKI_AUTH}"
+
+  # Grafana Cloud Tempo (OTLP/gRPC or OTLP/HTTP)
+  otlp/tempo:
+    endpoint: "${GRAFANA_CLOUD_TEMPO_ENDPOINT}"
+    headers:
+      Authorization: "${GRAFANA_CLOUD_TEMPO_AUTH}"
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, filter/health_checks, resource, batch]
-      exporters: [awsxray, awscloudwatchlogs]
+      exporters: [awsxray, awscloudwatchlogs, otlp/tempo]
 
     metrics:
       receivers: [otlp, prometheus]
       processors: [memory_limiter, resource, batch]
-      exporters: [awsemf]
+      exporters: [awsemf, prometheusremotewrite]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [loki]
 
   telemetry:
     logs:
@@ -120,3 +141,4 @@ service:
     metrics:
       level: "basic"
       address: 0.0.0.0:8888  # Expose collector's own metrics
+

@@ -1,0 +1,4789 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/v1/health": {
+      "get": {
+        "operationId": "HealthController_getHealth_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/api/v1/v1/auth/register": {
+      "post": {
+        "operationId": "AuthController_register_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/v1/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/v1/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/v1/auth/me": {
+      "get": {
+        "operationId": "AuthController_getMe_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/v1/auth/oauth/google": {
+      "get": {
+        "operationId": "AuthController_googleAuth_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/v1/auth/oauth/google/callback": {
+      "get": {
+        "operationId": "AuthController_googleAuthCallback_v1",
+        "parameters": [
+          {
+            "name": "code",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/v1/mobile/auth/login": {
+      "post": {
+        "operationId": "MobileAuthController_login_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileLoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "MobileAuth"
+        ]
+      }
+    },
+    "/api/v1/v1/mobile/auth/refresh": {
+      "post": {
+        "operationId": "MobileAuthController_refresh_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileRefreshDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "MobileAuth"
+        ]
+      }
+    },
+    "/api/v1/v1/mobile/auth/logout": {
+      "post": {
+        "operationId": "MobileAuthController_logout_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "MobileAuth"
+        ]
+      }
+    },
+    "/api/v1/v1/mobile/docs": {
+      "get": {
+        "operationId": "MobileController_getDocs_v1",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Mobile"
+        ]
+      }
+    },
+    "/api/v1/v1/mobile/chat/{conversationId}/messages": {
+      "get": {
+        "operationId": "MobileController_getMessages_v1",
+        "parameters": [
+          {
+            "name": "conversationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Mobile"
+        ]
+      }
+    },
+    "/api/v1/v1/mobile/quiz/{questionId}/answer": {
+      "put": {
+        "operationId": "MobileController_answerQuizQuestion_v1",
+        "parameters": [
+          {
+            "name": "questionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Mobile"
+        ]
+      }
+    },
+    "/api/v1/v1/mobile/progress": {
+      "get": {
+        "operationId": "MobileController_getProgress_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Mobile"
+        ]
+      }
+    },
+    "/api/v1/v1/mobile/leaderboard": {
+      "get": {
+        "operationId": "MobileController_getLeaderboard_v1",
+        "parameters": [
+          {
+            "name": "period",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Mobile"
+        ]
+      }
+    },
+    "/api/v1/v1/voice/adaptive/recommendation": {
+      "post": {
+        "operationId": "VoiceController_handleAdaptiveRecommendation_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Voice"
+        ]
+      }
+    },
+    "/api/v1/v1/voice/start": {
+      "post": {
+        "operationId": "VoiceController_startVoiceSession_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Voice"
+        ]
+      }
+    },
+    "/api/v1/v1/graph/build": {
+      "post": {
+        "operationId": "KnowledgeGraphController_buildGraph_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildGraphDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "KnowledgeGraph"
+        ]
+      }
+    },
+    "/api/v1/v1/graph/concepts/{concept}": {
+      "get": {
+        "operationId": "KnowledgeGraphController_getConceptNetwork_v1",
+        "parameters": [
+          {
+            "name": "concept",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "KnowledgeGraph"
+        ]
+      }
+    },
+    "/api/v1/v1/graph/explain/{concept}": {
+      "get": {
+        "operationId": "KnowledgeGraphController_explainConcept_v1",
+        "parameters": [
+          {
+            "name": "concept",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "KnowledgeGraph"
+        ]
+      }
+    },
+    "/api/v1/v1/graph/expand-query": {
+      "post": {
+        "operationId": "KnowledgeGraphController_expandQuery_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpandQueryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "KnowledgeGraph"
+        ]
+      }
+    },
+    "/api/v1/v1/chat/send": {
+      "post": {
+        "operationId": "ChatController_sendChat_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/api/v1/v1/chat/regenerate": {
+      "post": {
+        "operationId": "ChatController_regenerate_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/api/v1/v1/chat/list": {
+      "get": {
+        "operationId": "ChatController_listConversations_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/api/v1/v1/chat/{conversationId}": {
+      "get": {
+        "operationId": "ChatController_getChatHistory_v1",
+        "parameters": [
+          {
+            "name": "conversationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/api/v1/v1/api/plugins/install": {
+      "post": {
+        "operationId": "MarketplaceController_install_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallPluginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/api/plugins/install/{pluginId}": {
+      "delete": {
+        "operationId": "MarketplaceController_uninstall_v1",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/api/plugins/installed": {
+      "get": {
+        "operationId": "MarketplaceController_getInstalled_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/api/plugins/list": {
+      "get": {
+        "operationId": "MarketplaceController_getInstalledList_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/api/plugins/execute": {
+      "post": {
+        "operationId": "MarketplaceController_execute_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutePluginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/api/marketplace/plugins/{pluginId}/rate": {
+      "post": {
+        "operationId": "MarketplaceController_rate_v1",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RatePluginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Marketplace"
+        ]
+      }
+    },
+    "/api/v1/v1/study/flashcards/generate": {
+      "post": {
+        "operationId": "FlashcardController_generateFlashcards_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateFlashcardsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Flashcard"
+        ]
+      }
+    },
+    "/api/v1/v1/study/flashcards/{id}/review": {
+      "post": {
+        "operationId": "FlashcardController_submitReview_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitFlashcardReviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Flashcard"
+        ]
+      }
+    },
+    "/api/v1/v1/study/flashcards/deck/{id}": {
+      "get": {
+        "operationId": "FlashcardController_getDeck_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Flashcard"
+        ]
+      }
+    },
+    "/api/v1/v1/study/flashcards/decks": {
+      "get": {
+        "operationId": "FlashcardController_listDecks_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Flashcard"
+        ]
+      }
+    },
+    "/api/v1/v1/study/adaptive/review-queue": {
+      "get": {
+        "operationId": "FlashcardController_getReviewQueue_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Flashcard"
+        ]
+      }
+    },
+    "/api/v1/v1/analytics/dashboard": {
+      "get": {
+        "operationId": "AnalyticsController_getDashboardSummary_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Analytics"
+        ]
+      }
+    },
+    "/api/v1/v1/analytics/progress": {
+      "get": {
+        "operationId": "AnalyticsController_getProgressTimeline_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Analytics"
+        ]
+      }
+    },
+    "/api/v1/v1/analytics/mastery": {
+      "get": {
+        "operationId": "AnalyticsController_getTopicMastery_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Analytics"
+        ]
+      }
+    },
+    "/api/v1/v1/analytics/event": {
+      "post": {
+        "operationId": "AnalyticsController_logStudyEvent_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogSessionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Analytics"
+        ]
+      }
+    },
+    "/api/v1/v1/study/quiz/generate": {
+      "post": {
+        "operationId": "QuizController_generateQuiz_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateQuizDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Quiz"
+        ]
+      }
+    },
+    "/api/v1/v1/study/quiz/{id}/submit": {
+      "post": {
+        "operationId": "QuizController_submitQuiz_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitQuizDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Quiz"
+        ]
+      }
+    },
+    "/api/v1/v1/study/quiz/{id}": {
+      "get": {
+        "operationId": "QuizController_getQuiz_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Quiz"
+        ]
+      }
+    },
+    "/api/v1/v1/study/quizzes": {
+      "get": {
+        "operationId": "QuizController_listQuizzes_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Quiz"
+        ]
+      }
+    },
+    "/api/v1/v1/documents/upload": {
+      "post": {
+        "operationId": "DocumentsController_uploadFile_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadDocumentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/api/v1/v1/documents": {
+      "get": {
+        "operationId": "DocumentsController_findAll_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/api/v1/v1/documents/{id}": {
+      "get": {
+        "operationId": "DocumentsController_findOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
+        ]
+      },
+      "delete": {
+        "operationId": "DocumentsController_delete_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/api/v1/v1/documents/{id}/assets": {
+      "get": {
+        "operationId": "DocumentsController_getAssets_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/api/v1/v1/documents/{id}/status": {
+      "get": {
+        "operationId": "DocumentsController_getStatus_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/api/v1/v1/documents/{id}/chunks": {
+      "get": {
+        "operationId": "DocumentsController_getChunks_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/api/v1/v1/documents/{id}/metadata": {
+      "get": {
+        "operationId": "DocumentsController_getMetadata_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/api/v1/v1/documents/upload-inline-image": {
+      "post": {
+        "operationId": "DocumentsController_uploadInlineImage_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Documents"
+        ]
+      }
+    },
+    "/api/v1/v1/rag/search": {
+      "post": {
+        "operationId": "RagController_search_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchQueryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Rag"
+        ]
+      }
+    },
+    "/api/v1/v1/chat/stream": {
+      "post": {
+        "operationId": "StreamController_streamChat_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatStreamDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Stream"
+        ]
+      }
+    },
+    "/api/v1/v1/study/mode/generate": {
+      "post": {
+        "operationId": "StudyModeController_generateStudyContent_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateStudyModeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyMode"
+        ]
+      }
+    },
+    "/api/v1/v1/study/adaptive/summary": {
+      "get": {
+        "operationId": "StudyModeController_getAdaptiveSummary_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyMode"
+        ]
+      }
+    },
+    "/api/v1/v1/study/adaptive/session": {
+      "get": {
+        "operationId": "StudyModeController_getAdaptiveSession_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyMode"
+        ]
+      }
+    },
+    "/api/v1/v1/study/adaptive/session/{id}/answer": {
+      "put": {
+        "operationId": "StudyModeController_submitAdaptiveAnswer_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyMode"
+        ]
+      }
+    },
+    "/api/v1/v1/analytics/recommendations": {
+      "get": {
+        "operationId": "InsightsController_getStudyRecommendations_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Insights"
+        ]
+      }
+    },
+    "/api/v1/v1/tutor/plan/current": {
+      "get": {
+        "operationId": "TutorController_getCurrentPlan_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Tutor"
+        ]
+      }
+    },
+    "/api/v1/v1/tutor/plan/generate": {
+      "post": {
+        "operationId": "TutorController_generateWeeklyPlan_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePlanDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Tutor"
+        ]
+      }
+    },
+    "/api/v1/v1/tutor/task/{id}/complete": {
+      "post": {
+        "operationId": "TutorController_completeTask_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteTaskDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Tutor"
+        ]
+      }
+    },
+    "/api/v1/v1/tutor/recommendations": {
+      "get": {
+        "operationId": "TutorController_getRecommendations_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Tutor"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/plans": {
+      "get": {
+        "operationId": "BillingController_getPlans_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/subscription": {
+      "get": {
+        "operationId": "BillingController_getSubscription_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      },
+      "delete": {
+        "operationId": "BillingController_cancel_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/subscribe": {
+      "post": {
+        "operationId": "BillingController_upgrade_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpgradeSubscriptionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/checkout": {
+      "post": {
+        "operationId": "BillingController_createCheckout_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/portal": {
+      "post": {
+        "operationId": "BillingController_createPortal_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/summary": {
+      "get": {
+        "operationId": "BillingController_getSummary_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/invoices": {
+      "get": {
+        "operationId": "BillingController_getInvoices_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/billing/webhook": {
+      "post": {
+        "operationId": "BillingController_handleStripeWebhook_v1",
+        "parameters": [
+          {
+            "name": "stripe-signature",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/api/v1/v1/usage": {
+      "get": {
+        "operationId": "UsageController_getOrgUsage_v1",
+        "parameters": [
+          {
+            "name": "days",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Usage"
+        ]
+      }
+    },
+    "/api/v1/v1/usage/me": {
+      "get": {
+        "operationId": "UsageController_getMyUsage_v1",
+        "parameters": [
+          {
+            "name": "days",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Usage"
+        ]
+      }
+    },
+    "/api/v1/v1/organizations": {
+      "post": {
+        "operationId": "OrganizationController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrganizationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      },
+      "get": {
+        "operationId": "OrganizationController_findAll_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/api/v1/v1/organizations/{id}": {
+      "get": {
+        "operationId": "OrganizationController_findOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      },
+      "patch": {
+        "operationId": "OrganizationController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrganizationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      },
+      "delete": {
+        "operationId": "OrganizationController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/api/v1/v1/organizations/{id}/switch": {
+      "post": {
+        "operationId": "OrganizationController_switch_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/api/v1/v1/organizations/{id}/members": {
+      "get": {
+        "operationId": "OrganizationController_listMembers_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/api/v1/v1/organizations/{id}/invite": {
+      "post": {
+        "operationId": "OrganizationController_invite_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteMemberDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/api/v1/v1/organizations/invite/accept/{token}": {
+      "post": {
+        "operationId": "OrganizationController_acceptInvite_v1",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/api/v1/v1/organizations/{id}/members/{memberId}": {
+      "patch": {
+        "operationId": "OrganizationController_updateMemberRole_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "memberId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      },
+      "delete": {
+        "operationId": "OrganizationController_removeMember_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "memberId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Organization"
+        ]
+      }
+    },
+    "/api/v1/v1/teams/members": {
+      "get": {
+        "operationId": "TeamsController_getMembers_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/v1/teams/members/{userId}/role": {
+      "patch": {
+        "operationId": "TeamsController_updateRole_v1",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/v1/teams/members/{userId}": {
+      "delete": {
+        "operationId": "TeamsController_removeMember_v1",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/v1/teams/members/me/leave": {
+      "delete": {
+        "operationId": "TeamsController_leaveOrg_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/v1/teams/invitations": {
+      "post": {
+        "operationId": "TeamsController_invite_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Teams"
+        ]
+      },
+      "get": {
+        "operationId": "TeamsController_listInvitations_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/v1/teams/invitations/accept": {
+      "post": {
+        "operationId": "TeamsController_acceptInvite_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInviteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/v1/teams/invitations/{token}": {
+      "delete": {
+        "operationId": "TeamsController_revokeInvite_v1",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/v1/api-keys": {
+      "get": {
+        "operationId": "ApiKeyController_list_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ApiKey"
+        ]
+      },
+      "post": {
+        "operationId": "ApiKeyController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ApiKey"
+        ]
+      }
+    },
+    "/api/v1/v1/api-keys/{id}": {
+      "delete": {
+        "operationId": "ApiKeyController_revoke_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ApiKey"
+        ]
+      },
+      "get": {
+        "operationId": "ApiKeyController_getOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ApiKey"
+        ]
+      }
+    },
+    "/api/v1/v1/api-keys/{id}/stats": {
+      "get": {
+        "operationId": "ApiKeysController_stats_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ApiKeys"
+        ]
+      }
+    },
+    "/api/v1/v1/api/v1/external/chat": {
+      "post": {
+        "operationId": "ApiGatewayController_chat_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalChatDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ApiGateway"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/organizations": {
+      "get": {
+        "operationId": "AdminController_getOrganizations_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/organizations/{id}/suspend": {
+      "post": {
+        "operationId": "AdminController_suspendOrganization_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendOrgDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/organizations/{id}/unsuspend": {
+      "post": {
+        "operationId": "AdminController_unsuspendOrganization_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/metrics": {
+      "get": {
+        "operationId": "AdminController_getSystemMetrics_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/audit-logs": {
+      "get": {
+        "operationId": "AdminController_getAuditLogs_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/users": {
+      "get": {
+        "operationId": "AdminUsersController_listUsers_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/users/{id}": {
+      "get": {
+        "operationId": "AdminUsersController_getUserProfile_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminUsersController_updateUser_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminUsersController_softDeleteUser_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/users/{id}/impersonate": {
+      "post": {
+        "operationId": "AdminUsersController_impersonateUser_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/users/export": {
+      "post": {
+        "operationId": "AdminUsersController_exportUsers_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryUsersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/users/export/{jobId}": {
+      "get": {
+        "operationId": "AdminUsersController_getExportResult_v1",
+        "parameters": [
+          {
+            "name": "jobId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminUsers"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/system/health": {
+      "get": {
+        "operationId": "AdminSystemController_getHealth_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminSystem"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/system/config": {
+      "get": {
+        "operationId": "AdminSystemController_listConfigs_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminSystem"
+        ]
+      },
+      "post": {
+        "operationId": "AdminSystemController_createConfig_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminSystem"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/system/config/{key}": {
+      "get": {
+        "operationId": "AdminSystemController_getConfig_v1",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminSystem"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminSystemController_updateConfig_v1",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminSystem"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminSystemController_deleteConfig_v1",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminSystem"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/flags": {
+      "get": {
+        "operationId": "AdminFlagsController_getAllFlags_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminFlags"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/flags/{key}": {
+      "patch": {
+        "operationId": "AdminFlagsController_updateFlag_v1",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFlagDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminFlags"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/compliance/exports": {
+      "get": {
+        "operationId": "AdminComplianceController_getExportRequests_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminCompliance"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/compliance/deletions": {
+      "get": {
+        "operationId": "AdminComplianceController_getDeletionRequests_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminCompliance"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/compliance/deletions/{requestId}": {
+      "delete": {
+        "operationId": "AdminComplianceController_cancelDeletionRequest_v1",
+        "parameters": [
+          {
+            "name": "requestId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminCompliance"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/compliance/retention-policies": {
+      "get": {
+        "operationId": "AdminComplianceController_getRetentionPolicies_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminCompliance"
+        ]
+      },
+      "post": {
+        "operationId": "AdminComplianceController_saveRetentionPolicy_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminCompliance"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/compliance/audit-logs": {
+      "get": {
+        "operationId": "AdminComplianceController_getAuditLogs_v1",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorType",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resourceType",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startDate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orgId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminCompliance"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/compliance/audit-logs/export": {
+      "get": {
+        "operationId": "AdminComplianceController_exportAuditLogs_v1",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorType",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resourceType",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startDate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orgId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminCompliance"
+        ]
+      }
+    },
+    "/api/v1/v1/feature-flags/my-flags": {
+      "get": {
+        "operationId": "FeatureFlagsController_getMyFlags_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FeatureFlags"
+        ]
+      }
+    },
+    "/api/v1/v1/feature-flags/override": {
+      "post": {
+        "operationId": "FeatureFlagsController_setOverride_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOverrideDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FeatureFlags"
+        ]
+      }
+    },
+    "/api/v1/v1/feature-flags/override/{orgId}/{key}": {
+      "delete": {
+        "operationId": "FeatureFlagsController_removeOverride_v1",
+        "parameters": [
+          {
+            "name": "orgId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FeatureFlags"
+        ]
+      }
+    },
+    "/api/v1/v1/webhooks": {
+      "get": {
+        "operationId": "WebhooksController_list_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Webhooks"
+        ]
+      },
+      "post": {
+        "operationId": "WebhooksController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Webhooks"
+        ]
+      }
+    },
+    "/api/v1/v1/webhooks/{id}": {
+      "delete": {
+        "operationId": "WebhooksController_delete_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Webhooks"
+        ]
+      }
+    },
+    "/v1/r/{code}": {
+      "get": {
+        "operationId": "ReferralController_trackReferralClick_v1",
+        "parameters": [
+          {
+            "name": "code",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Referral"
+        ]
+      }
+    },
+    "/api/v1/v1/sso/login": {
+      "post": {
+        "operationId": "SsoController_initiateSso_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SsoLoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Sso"
+        ]
+      }
+    },
+    "/api/v1/v1/sso/saml/callback": {
+      "post": {
+        "operationId": "SsoController_handleSamlCallback_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Sso"
+        ]
+      }
+    },
+    "/api/v1/v1/sso/saml/metadata": {
+      "get": {
+        "operationId": "SsoController_getSpMetadata_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Sso"
+        ]
+      }
+    },
+    "/api/v1/v1/internal/audit": {
+      "post": {
+        "operationId": "AuditController_logInternalAudit_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Audit"
+        ]
+      }
+    },
+    "/api/v1/v1/compliance/consent": {
+      "get": {
+        "operationId": "ComplianceController_getConsent_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compliance"
+        ]
+      },
+      "post": {
+        "operationId": "ComplianceController_updateConsent_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compliance"
+        ]
+      }
+    },
+    "/api/v1/v1/compliance/export/status": {
+      "get": {
+        "operationId": "ComplianceController_getExportStatus_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compliance"
+        ]
+      }
+    },
+    "/api/v1/v1/compliance/delete-account/status": {
+      "get": {
+        "operationId": "ComplianceController_getDeletionStatus_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compliance"
+        ]
+      }
+    },
+    "/api/v1/v1/compliance/export": {
+      "post": {
+        "operationId": "ComplianceController_requestDataExport_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compliance"
+        ]
+      }
+    },
+    "/api/v1/v1/compliance/delete-account": {
+      "post": {
+        "operationId": "ComplianceController_requestAccountDeletion_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compliance"
+        ]
+      }
+    },
+    "/api/v1/v1/compliance/delete-account/{requestId}": {
+      "delete": {
+        "operationId": "ComplianceController_cancelAccountDeletion_v1",
+        "parameters": [
+          {
+            "name": "requestId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Compliance"
+        ]
+      }
+    },
+    "/api/v1/v1/api/marketplace/plugins": {
+      "get": {
+        "operationId": "PluginsController_listAll_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Plugins"
+        ]
+      },
+      "post": {
+        "operationId": "PluginsController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePluginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Plugins"
+        ]
+      }
+    },
+    "/api/v1/v1/api/marketplace/plugins/{id}": {
+      "get": {
+        "operationId": "PluginsController_findOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Plugins"
+        ]
+      },
+      "put": {
+        "operationId": "PluginsController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePluginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Plugins"
+        ]
+      },
+      "delete": {
+        "operationId": "PluginsController_delete_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Plugins"
+        ]
+      }
+    },
+    "/api/v1/v1/api/prompt-optimizer/versions": {
+      "get": {
+        "operationId": "PromptOptimizerController_list_v1",
+        "parameters": [
+          {
+            "name": "mode",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PromptOptimizer"
+        ]
+      }
+    },
+    "/api/v1/v1/api/prompt-optimizer/create": {
+      "post": {
+        "operationId": "PromptOptimizerController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePromptDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PromptOptimizer"
+        ]
+      }
+    },
+    "/api/v1/v1/api/prompt-optimizer/activate": {
+      "post": {
+        "operationId": "PromptOptimizerController_activate_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivatePromptDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PromptOptimizer"
+        ]
+      }
+    },
+    "/api/v1/v1/api/prompt-optimizer/rollback/{mode}": {
+      "post": {
+        "operationId": "PromptOptimizerController_rollback_v1",
+        "parameters": [
+          {
+            "name": "mode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PromptOptimizer"
+        ]
+      }
+    },
+    "/api/v1/v1/api/tool-generator/request": {
+      "post": {
+        "operationId": "ToolGeneratorController_requestTool_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestToolDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ToolGenerator"
+        ]
+      }
+    },
+    "/api/v1/v1/api/autonomous/agent/trigger": {
+      "post": {
+        "operationId": "AutonomousAgentController_triggerScan_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AutonomousAgent"
+        ]
+      }
+    },
+    "/api/v1/v1/api/autonomous/actions": {
+      "get": {
+        "operationId": "AutonomousAgentController_listActions_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AutonomousAgent"
+        ]
+      }
+    },
+    "/api/v1/v1/api/autonomous/actions/{id}/approve": {
+      "post": {
+        "operationId": "AutonomousAgentController_approve_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AutonomousAgent"
+        ]
+      }
+    },
+    "/api/v1/v1/api/autonomous/actions/{id}/reject": {
+      "post": {
+        "operationId": "AutonomousAgentController_reject_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectActionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AutonomousAgent"
+        ]
+      }
+    },
+    "/api/v1/v1/ai-os/execute": {
+      "post": {
+        "operationId": "AiOsController_executeTask_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AiOs"
+        ]
+      }
+    },
+    "/api/v1/v1/ai-os/agent/run": {
+      "post": {
+        "operationId": "AiOsController_runAgentLifecycle_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AiOs"
+        ]
+      }
+    },
+    "/api/v1/v1/ai-os/schedule": {
+      "post": {
+        "operationId": "AiOsController_scheduleJob_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AiOs"
+        ]
+      }
+    },
+    "/api/v1/v1/ai-os/schedules": {
+      "get": {
+        "operationId": "AiOsController_listSchedules_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AiOs"
+        ]
+      }
+    },
+    "/api/v1/v1/ai-os/schedule/{id}": {
+      "delete": {
+        "operationId": "AiOsController_removeSchedule_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AiOs"
+        ]
+      }
+    },
+    "/api/v1/v1/ai-os/status": {
+      "get": {
+        "operationId": "AiOsController_getStatus_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AiOs"
+        ]
+      }
+    },
+    "/api/v1/v1/platform/metrics/snapshot": {
+      "get": {
+        "operationId": "MetricsController_getSnapshot_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Metrics"
+        ]
+      }
+    },
+    "/api/v1/v1/platform/metrics/revenue": {
+      "get": {
+        "operationId": "MetricsController_getRevenueMetrics_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Metrics"
+        ]
+      }
+    },
+    "/api/v1/v1/platform/metrics/customers": {
+      "get": {
+        "operationId": "MetricsController_getCustomerMetrics_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Metrics"
+        ]
+      }
+    },
+    "/api/v1/v1/platform/metrics/engagement": {
+      "get": {
+        "operationId": "MetricsController_getEngagementMetrics_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Metrics"
+        ]
+      }
+    },
+    "/api/v1/v1/platform/metrics/unit-economics": {
+      "get": {
+        "operationId": "MetricsController_getUnitEconomics_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Metrics"
+        ]
+      }
+    },
+    "/api/v1/v1/platform/metrics/cohorts": {
+      "get": {
+        "operationId": "MetricsController_getCohortAnalysis_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Metrics"
+        ]
+      }
+    },
+    "/api/v1/v1/metrics": {
+      "get": {
+        "operationId": "PrometheusMetricsController_getMetrics_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PrometheusMetrics"
+        ]
+      }
+    },
+    "/api/v1/v1/leaderboard/{orgId}": {
+      "get": {
+        "operationId": "LeaderboardController_getLeaderboard_v1",
+        "parameters": [
+          {
+            "name": "orgId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Leaderboard"
+        ]
+      }
+    },
+    "/api/v1/v1/progress/me": {
+      "get": {
+        "operationId": "ProgressController_getMyProgress_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Progress"
+        ]
+      }
+    },
+    "/api/v1/v1/exams": {
+      "post": {
+        "operationId": "ExamController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExamDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exam"
+        ]
+      },
+      "get": {
+        "operationId": "ExamController_findAll_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exam"
+        ]
+      }
+    },
+    "/api/v1/v1/exams/{id}": {
+      "get": {
+        "operationId": "ExamController_findOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exam"
+        ]
+      }
+    },
+    "/api/v1/v1/exams/{id}/status": {
+      "get": {
+        "operationId": "ExamController_getStatus_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exam"
+        ]
+      }
+    },
+    "/api/v1/v1/exams/attempts/{attemptId}/score": {
+      "post": {
+        "operationId": "ExamController_scoreAttempt_v1",
+        "parameters": [
+          {
+            "name": "attemptId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Exam"
+        ]
+      }
+    },
+    "/api/v1/v1/groups": {
+      "post": {
+        "operationId": "StudyGroupController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStudyGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      },
+      "get": {
+        "operationId": "StudyGroupController_findAll_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/groups/{id}/join": {
+      "post": {
+        "operationId": "StudyGroupController_join_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/groups/{id}/invite": {
+      "post": {
+        "operationId": "StudyGroupController_invite_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/groups/{id}/members/{userId}": {
+      "delete": {
+        "operationId": "StudyGroupController_removeMember_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/groups/{id}/docs": {
+      "post": {
+        "operationId": "StudyGroupController_addDocument_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/groups/{id}/docs/{docId}": {
+      "delete": {
+        "operationId": "StudyGroupController_removeDocument_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "docId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/groups/{id}": {
+      "get": {
+        "operationId": "StudyGroupController_findOne_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/groups/{id}/sessions/{sid}/messages": {
+      "get": {
+        "operationId": "StudyGroupController_findSessionMessages_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sid",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/groups/{id}/sessions": {
+      "post": {
+        "operationId": "StudyGroupController_createSession_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/groups/{id}/sessions/{sid}/start": {
+      "post": {
+        "operationId": "StudyGroupController_startSession_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sid",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/groups/{id}/sessions/{sid}/end": {
+      "post": {
+        "operationId": "StudyGroupController_endSession_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sid",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "StudyGroup"
+        ]
+      }
+    },
+    "/api/v1/v1/api-keys/{id}/usage": {
+      "get": {
+        "operationId": "ApiKeyController_usage_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ApiKey"
+        ]
+      }
+    },
+    "/api/public/v1/documents": {
+      "get": {
+        "description": "Retrieve a cursor-paginated list of processed organization documents.",
+        "operationId": "PublicDocumentsController_list",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of documents retrieved successfully."
+          },
+          "401": {
+            "description": "Invalid or missing API key."
+          },
+          "403": {
+            "description": "Insufficient scopes."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List public documents",
+        "tags": [
+          "Public Documents"
+        ]
+      },
+      "post": {
+        "description": "Upload a document file to the organization study processing pipeline.",
+        "operationId": "PublicDocumentsController_upload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadDocumentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document uploaded and processing queued successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload document",
+        "tags": [
+          "Public Documents"
+        ]
+      }
+    },
+    "/api/public/v1/documents/{id}": {
+      "get": {
+        "description": "Retrieve metadata details of a specific organization document.",
+        "operationId": "PublicDocumentsController_getOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document metadata retrieved successfully."
+          },
+          "404": {
+            "description": "Document not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get document by ID",
+        "tags": [
+          "Public Documents"
+        ]
+      },
+      "delete": {
+        "description": "Permantently delete a document, its chunks, storage objects, and vector embeddings.",
+        "operationId": "PublicDocumentsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document deleted successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete document",
+        "tags": [
+          "Public Documents"
+        ]
+      }
+    },
+    "/api/public/v1/chat/sessions": {
+      "get": {
+        "description": "Retrieve all interactive study chat sessions for the authenticated organization.",
+        "operationId": "PublicChatController_listSessions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Chat sessions retrieved successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List chat sessions",
+        "tags": [
+          "Public Chat"
+        ]
+      },
+      "post": {
+        "description": "Create a new study chat session to begin discussing documents.",
+        "operationId": "PublicChatController_createSession",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Chat session created successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create chat session",
+        "tags": [
+          "Public Chat"
+        ]
+      }
+    },
+    "/api/public/v1/chat/sessions/{id}/messages": {
+      "post": {
+        "description": "Post a message into a chat session and receive a streaming Server-Sent Events (SSE) AI response.",
+        "operationId": "PublicChatController_sendMessage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event stream initiated successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send message to chat session",
+        "tags": [
+          "Public Chat"
+        ]
+      }
+    },
+    "/api/public/v1/quizzes": {
+      "get": {
+        "description": "Retrieve a list of generated study quizzes for the organization.",
+        "operationId": "PublicQuizController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Quizzes retrieved successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List quizzes",
+        "tags": [
+          "Public Quiz"
+        ]
+      }
+    },
+    "/api/public/v1/quizzes/generate": {
+      "post": {
+        "description": "Generate a new automated study quiz from organization documents or chat context.",
+        "operationId": "PublicQuizController_generate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateQuizDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Quiz generated successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Generate quiz",
+        "tags": [
+          "Public Quiz"
+        ]
+      }
+    },
+    "/api/public/v1/quizzes/{id}": {
+      "get": {
+        "description": "Retrieve questions and answers of a specific study quiz.",
+        "operationId": "PublicQuizController_getOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Quiz retrieved successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get quiz by ID",
+        "tags": [
+          "Public Quiz"
+        ]
+      }
+    },
+    "/api/public/v1/quizzes/{id}/submit": {
+      "post": {
+        "description": "Submit quiz responses to receive a graded score and trigger adaptive mastery adjustments.",
+        "operationId": "PublicQuizController_submit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitQuizDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Quiz responses submitted and graded successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Submit quiz answers",
+        "tags": [
+          "Public Quiz"
+        ]
+      }
+    },
+    "/api/public/v1/progress/summary": {
+      "get": {
+        "description": "Retrieve high-level study statistics, study durations, quiz attempt counts, and current streak days.",
+        "operationId": "PublicProgressController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Summary statistics retrieved successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get progress summary",
+        "tags": [
+          "Public Progress"
+        ]
+      }
+    },
+    "/api/public/v1/progress/mastery": {
+      "get": {
+        "description": "Retrieve a list of mastery scores and classification levels grouped by topic.",
+        "operationId": "PublicProgressController_mastery",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Topic mastery scores retrieved successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get topic mastery",
+        "tags": [
+          "Public Progress"
+        ]
+      }
+    },
+    "/api/public/v1/progress/timeline": {
+      "get": {
+        "description": "Retrieve day-by-day aggregates of flashcard reviews, quizzes taken, and total study duration over the last 14 days.",
+        "operationId": "PublicProgressController_timeline",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Progress timeline retrieved successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get 14-day study timeline",
+        "tags": [
+          "Public Progress"
+        ]
+      }
+    },
+    "/api/public/v1/webhooks": {
+      "post": {
+        "description": "Create a new outbound webhook endpoint to receive organization event notifications. The generated HMAC signature secret is returned exactly once in the response.",
+        "operationId": "PublicWebhooksController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Webhook endpoint registered and HMAC secret generated successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Register webhook endpoint",
+        "tags": [
+          "Public Webhooks"
+        ]
+      }
+    },
+    "/api/public/v1/openapi.json": {
+      "get": {
+        "description": "Retrieve the raw OpenAPI Swagger specification for this platform.",
+        "operationId": "PublicOpenApiController_getOpenApiSpec",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OpenAPI specification retrieved successfully."
+          }
+        },
+        "summary": "Get OpenAPI Specification JSON",
+        "tags": [
+          "Public OpenAPI Specification"
+        ]
+      }
+    },
+    "/api/public/v1/usage/stats": {
+      "get": {
+        "description": "Retrieve requests per day, error rate, and average latency over the last 30 days.",
+        "operationId": "PublicUsageController_getUsageStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Usage statistics retrieved successfully."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get usage stats",
+        "tags": [
+          "Public Usage"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Study Assistant Public API",
+    "description": "Production-grade developer APIs for AI Study Assistant Platform",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "API Key",
+        "type": "http",
+        "name": "Authorization",
+        "description": "Enter your API Key prefixed with Bearer (e.g. Bearer ska_live_...)",
+        "in": "header"
+      }
+    },
+    "schemas": {
+      "RegisterDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RefreshTokenDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "MobileLoginDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "MobileRefreshDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "BuildGraphDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ExpandQueryDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "InstallPluginDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ExecutePluginDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RatePluginDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "GenerateFlashcardsDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SubmitFlashcardReviewDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "LogSessionDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "GenerateQuizDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SubmitQuizDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UploadDocumentDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SearchQueryDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ChatStreamDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "GenerateStudyModeDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "GeneratePlanDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CompleteTaskDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpgradeSubscriptionDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateOrganizationDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateOrganizationDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "InviteMemberDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateMemberRoleDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateRoleDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "InviteDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "AcceptInviteDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateApiKeyDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ExternalChatDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SuspendOrgDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "QueryUsersDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateConfigDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateConfigDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateFlagDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SetOverrideDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateWebhookDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SsoLoginDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreatePluginDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdatePluginDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreatePromptDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ActivatePromptDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RequestToolDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RejectActionDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateExamDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateStudyGroupDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateSessionDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SendMessageDto": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+- name: Create server deployment target directory
+  file:
+    path: /app
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: '0755'
+
+- name: Pull codebase from source repository
+  git:
+    repo: "{{ git_repo_url }}"
+    dest: /app
+    version: main
+    force: yes
+  become_user: deploy
+
+- name: Inject app environment variables from Ansible Vault source
+  copy:
+    content: |
+      # Core Services configuration (Provisioned via Ansible Group Vars)
+      REGION={{ REGION }}
+      DATABASE_URL=postgresql://deploy:{{ vault_db_pass }}@{{ DB_HOST }}:5432/study_assistant
+      REDIS_HOST={{ REDIS_HOST }}
+      QDRANT_HOST={{ QDRANT_HOST }}
+      
+      # Encrypted credentials from Ansible Vault
+      GEMINI_API_KEY={{ vault_gemini_api_key }}
+      NEXT_PUBLIC_API_URL=https://api.{{ domain_name }}/api/v1
+      NEXT_PUBLIC_AI_SERVICE_URL=https://ai.{{ domain_name }}
+    dest: /app/.env
+    owner: deploy
+    group: deploy
+    mode: '0600'
+
+- name: Launch monorepo services with Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: /app
+    state: present
+    build: always
+  become_user: deploy

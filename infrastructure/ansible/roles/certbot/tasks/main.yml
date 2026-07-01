@@ -1,0 +1,21 @@
+- name: Install Certbot and nginx bindings
+  apt:
+    name:
+      - certbot
+      - python3-certbot-nginx
+    state: present
+
+- name: Retrieve LetsEncrypt certificates for domain
+  command: >
+    certbot certonly --standalone --non-interactive --agree-tos
+    -m "{{ email_for_certs }}"
+    -d "{{ domain_name }}"
+  args:
+    creates: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+
+- name: Configure daily cron to execute certbot renew checks
+  cron:
+    name: "Auto-renew certs"
+    minute: "0"
+    hour: "3"
+    job: "certbot renew --post-hook 'docker compose -f /app/docker-compose.yml restart web' > /dev/null"

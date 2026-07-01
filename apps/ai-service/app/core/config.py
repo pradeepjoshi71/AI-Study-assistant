@@ -4,6 +4,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Study Assistant - AI Service"
     AI_PORT: int = 8000
     AI_HOST: str = "0.0.0.0"
+    NESTJS_API_URL: str = "http://localhost:3001/api/v1"
     
     # Database Connection Settings
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/study_assistant?schema=public"
@@ -14,8 +15,12 @@ class Settings(BaseSettings):
     AI_REDIS_PASSWORD: str = ""
 
     # Qdrant Vector DB Configuration
-    QDRANT_HOST: str = "localhost"
+    QDRANT_HOST: str = "qdrant-node1"
     QDRANT_PORT: int = 6333
+    QDRANT_HOST_NODE1: str = "qdrant-node1"
+    QDRANT_HOST_NODE2: str = "qdrant-node2"
+    SECONDARY_REGION: bool = False
+
 
     # Google Gemini API Key
     GEMINI_API_KEY: str = ""

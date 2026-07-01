@@ -30,7 +30,8 @@ export class FeatureFlagGuard implements CanActivate {
       throw new ForbiddenException('Organization context missing for feature evaluation');
     }
 
-    const enabled = await this.featureFlags.isEnabled(organizationId, featureKey);
+    const userId: string = request.user?.sub || '';
+    const enabled = await this.featureFlags.isEnabled(featureKey, userId, organizationId);
 
     if (!enabled) {
       throw new ForbiddenException(

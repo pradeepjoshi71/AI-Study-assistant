@@ -23,6 +23,8 @@ import { UploadDocumentDto } from "./dto/upload-document.dto";
 import { DocumentResponseDto } from "./dto/document-response.dto";
 import { ChunkResponseDto } from "./dto/chunk-response.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt.guard";
+import { Audit } from "../audit/decorators/audit.decorator";
+import { AuditInterceptor } from "../audit/interceptors/audit.interceptor";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 
 import { PrismaService } from "../prisma/prisma.service";
@@ -30,6 +32,7 @@ import { BadRequestException } from "@nestjs/common";
 
 @UseGuards(JwtAuthGuard)
 @Controller("documents")
+@UseInterceptors(AuditInterceptor)
 export class DocumentsController {
   constructor(
     private documentsService: DocumentsService,
@@ -37,6 +40,7 @@ export class DocumentsController {
   ) {}
 
   @Post("upload")
+  @Audit("document.upload", "document")
   @UseInterceptors(FileInterceptor("file"))
   async uploadFile(
     @CurrentUser("id") userId: string,
@@ -135,6 +139,7 @@ export class DocumentsController {
   }
 
   @Delete(":id")
+  @Audit("document.delete", "document")
   async delete(@Param("id") id: string, @CurrentUser("id") userId: string) {
     return this.documentsService.delete(id, userId);
   }

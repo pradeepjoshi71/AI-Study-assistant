@@ -100,4 +100,38 @@ export class QdrantClient {
       throw err;
     }
   }
+
+  async deletePointsByUserId(userId: string): Promise<void> {
+    const url = `${this.qdrantUrl}/collections/${this.collectionName}/points/delete`;
+    const payload = {
+      filter: {
+        must: [
+          {
+            key: "userId",
+            match: { value: userId },
+          },
+        ],
+      },
+    };
+
+    try {
+      this.logger.log(`Deleting points for userId: ${userId} in Qdrant`);
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        this.logger.error(`Qdrant delete points request failed: ${res.status} - ${errText}`);
+        throw new Error(`Qdrant error: ${res.statusText}`);
+      }
+    } catch (err: any) {
+      this.logger.error(`Failed to execute Qdrant points deletion: ${err.message}`);
+      throw err;
+    }
+  }
 }

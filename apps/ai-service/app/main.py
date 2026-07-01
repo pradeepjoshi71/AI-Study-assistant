@@ -1,3 +1,4 @@
+import httpx
 import logging
 from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,9 +32,42 @@ app.add_middleware(TokenBudgetMiddleware)
 
 
 @app.get("/health", tags=["Health"])
-async def health_check():
-    """FastAPI health check — polled by NestJS HealthController"""
-    return {"status": "ok", "service": settings.PROJECT_NAME}
+def health_check(response: Response):
+    """FastAPI health check returns status, model_loaded, and Qdrant health."""
+    import datetime
+    from qdrant_client import QdrantClient
+    
+    qdrant_status = "UP"
+    qdrant_details = {}
+    try:
+        from app.services.qdrant_service import qdrant_service
+        client = qdrant_service.get_write_client()
+        if hasattr(client, "health"):
+            qdrant_details = client.health()
+        else:
+            client.get_collections()
+            qdrant_details = {"status": "green"}
+    except Exception as e:
+        qdrant_status = "DOWN"
+        qdrant_details = {"error": str(e)}
+
+    # Model loaded indicator (FastAPI service loaded dependencies successfully)
+    model_loaded = True
+    
+    all_ok = qdrant_status == "UP"
+    
+    payload = {
+        "status": "ok" if all_ok else "degraded",
+        "model_loaded": model_loaded,
+        "qdrant": qdrant_details,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+    }
+    
+    if not all_ok:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        
+    return payload
+
 
 from app.api.chat_stream import router as chat_stream_router
 from app.api.memory_summarizer import router as memory_summarizer_router
@@ -49,6 +83,10 @@ from app.api.voice import router as voice_router
 from app.api.voice_websocket import router as voice_websocket_router
 from app.api.adaptive import router as adaptive_router
 from app.api.recommender import router as recommender_router
+from app.api.exam_engine import router as exam_engine_router
+from app.api.exam_scorer import router as exam_scorer_router
+from app.api.weakness_detector import router as weakness_detector_router
+from app.api.group_rag import router as group_rag_router
 app.include_router(chat_stream_router, prefix="/ai")
 app.include_router(memory_summarizer_router, prefix="/ai")
 app.include_router(synthesis_engine_router, prefix="/ai")
@@ -63,9 +101,55 @@ app.include_router(voice_router, prefix="/ai")
 app.include_router(voice_websocket_router, prefix="/ai")
 app.include_router(adaptive_router, prefix="/ai")
 app.include_router(recommender_router, prefix="/ai")
+app.include_router(exam_engine_router, prefix="/ai")
+app.include_router(exam_scorer_router, prefix="/ai")
+app.include_router(weakness_detector_router, prefix="/ai")
+app.include_router(group_rag_router, prefix="/ai")
+
+
+
+@app.post("/internal/audit")
+async def forward_internal_audit(request: Request):
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    # Forward to NestJS internal audit endpoint
+    url = f"{settings.NESTJS_API_URL}/internal/audit"
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, timeout=5.0)
+            if response.status_code != 200:
+                logger.error(f"Failed forwarding audit log to NestJS: Status {response.status_code}, Body {response.text}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"NestJS internal API error: {response.text}"
+                )
+    except httpx.RequestError as exc:
+        logger.error(f"HTTP Request failed while forwarding audit log: {exc}")
+        raise HTTPException(
+            status_code=520,
+            detail=f"Cannot reach NestJS internal audit API: {exc}"
+        )
+
+    return {"success": True}
+
+async def daily_qdrant_backup_loop():
+    logger.info("Starting background daily Qdrant backup loop...")
+    while True:
+        # Wait 24 hours (86400 seconds)
+        await asyncio.sleep(86400)
+        logger.info("Daily Qdrant backup loop: Triggering backup_collections...")
+        try:
+            from app.services.qdrant_service import backup_collections
+            backup_collections()
+        except Exception as e:
+            logger.error(f"Error in daily Qdrant backup loop: {e}")
 
 @app.on_event("startup")
 async def startup_event():
+    import os
     if os.getenv("RUN_BACKGROUND_WORKERS", "true").lower() == "true":
         logger.info("FastAPI starting: launching background BullMQ processing worker...")
         asyncio.create_task(run_worker())
@@ -94,6 +178,19 @@ async def startup_event():
         ensure_bucket(minio)
     except Exception as e:
         logger.warning(f"Minio bucket bootstrap failed (non-fatal — likely not configured): {e}")
+
+    # Secondary region restore check
+    if getattr(settings, "SECONDARY_REGION", False) or os.getenv("SECONDARY_REGION", "false").lower() == "true":
+        try:
+            logger.info("Secondary region detected. Checking/restoring Qdrant collections from latest Minio snapshots...")
+            from app.services.qdrant_service import restore_collections_if_empty
+            restore_collections_if_empty()
+        except Exception as e:
+            logger.error(f"Secondary region Qdrant restore failed: {e}")
+
+    # Start daily Qdrant backup loop
+    asyncio.create_task(daily_qdrant_backup_loop())
+
 
     # Pre-load CLIP ViT-B/32 to amortise first-request latency
     try:
@@ -266,6 +363,48 @@ async def ai_chat_summarize(req: SummarizeRequest):
     summary = await llm_orchestrator.summarize(req.messages)
     return {"summary": summary}
 
+@app.post("/collections/{name}/snapshots", tags=["Qdrant"])
+def create_collection_snapshot(name: str):
+    """Trigger collection snapshot backup to Minio."""
+    try:
+        import tempfile
+        import os
+        import io
+        from app.services.qdrant_service import qdrant_service
+        from app.services.minio_storage import get_minio_client, ensure_bucket
+        
+        client = qdrant_service.get_write_client()
+        minio = get_minio_client()
+        ensure_bucket(minio)
+        
+        logger.info(f"Triggering manual snapshot for collection: {name}...")
+        snapshot_meta = client.create_snapshot(collection_name=name)
+        snapshot_name = snapshot_meta.name
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_path = os.path.join(tmpdir, snapshot_name)
+            client.download_snapshot(
+                collection_name=name,
+                snapshot_name=snapshot_name,
+                location=local_path
+            )
+            
+            object_name = f"qdrant-snapshots/{name}/{snapshot_name}"
+            with open(local_path, "rb") as f:
+                data = f.read()
+                minio.put_object(
+                    bucket_name=settings.MINIO_BUCKET,
+                    object_name=object_name,
+                    data=io.BytesIO(data),
+                    length=len(data),
+                    content_type="application/octet-stream"
+                )
+            logger.info(f"Uploaded Qdrant snapshot to Minio: {object_name}")
+            return {"status": "success", "snapshot": snapshot_name, "path": object_name}
+    except Exception as e:
+        logger.error(f"Manual Qdrant snapshot failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 def read_root():
     return {
@@ -274,31 +413,4 @@ def read_root():
         "documentation": "/docs"
     }
 
-@app.get("/health")
-def health_check(response: Response):
-    redis_connection_status = "disconnected"
-    try:
-        r = redis.Redis(
-            host=settings.AI_REDIS_HOST,
-            port=int(settings.AI_REDIS_PORT),
-            password=settings.AI_REDIS_PASSWORD or None,
-            socket_timeout=2
-        )
-        if r.ping():
-            redis_connection_status = "connected"
-    except Exception as err:
-        logger.warning(f"Redis Connection Failure: {err}")
-        redis_connection_status = f"error: {str(err)}"
 
-    if redis_connection_status != "connected":
-        response.status_code = status.HTTP_200_OK # Return 200 so web dashboard can read status object details cleanly
-        return {
-            "status": "degraded",
-            "redis_connection": redis_connection_status,
-            "message": "AI service is active but unable to connect to Redis cache broker"
-        }
-
-    return {
-        "status": "ok",
-        "redis_connection": redis_connection_status
-    }

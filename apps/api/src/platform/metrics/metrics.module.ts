@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MetricsService } from './metrics.service';
 import { MetricsController } from './metrics.controller';
+import { PrometheusMetricsController } from './prometheus.controller';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { RedisModule } from '../../redis/redis.module';
 
@@ -10,7 +11,7 @@ import { RedisModule } from '../../redis/redis.module';
     RedisModule,
   ],
   providers: [MetricsService],
-  controllers: [MetricsController],
+  controllers: [MetricsController, PrometheusMetricsController],
   exports: [MetricsService],
 })
 export class MetricsModule {}

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { PlansService } from '../billing/plans.service';
+import { ActorType } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
@@ -26,9 +27,10 @@ export class AdminService {
       }),
       this.prisma.auditLog.create({
         data: {
-          organizationId,
+          orgId: organizationId,
+          userId: actorId,
           actorId,
-          actorType: 'admin',
+          actorType: ActorType.ADMIN,
           action: 'organization.suspended',
           resourceType: 'organization',
           resourceId: organizationId,
@@ -52,12 +54,14 @@ export class AdminService {
       }),
       this.prisma.auditLog.create({
         data: {
-          organizationId,
+          orgId: organizationId,
+          userId: actorId,
           actorId,
-          actorType: 'admin',
+          actorType: ActorType.ADMIN,
           action: 'organization.unsuspended',
           resourceType: 'organization',
           resourceId: organizationId,
+          metadata: {},
         },
       }),
     ]);
@@ -164,7 +168,7 @@ export class AdminService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (params.organizationId) where.organizationId = params.organizationId;
+    if (params.organizationId) where.orgId = params.organizationId;
     if (params.actorId) where.actorId = params.actorId;
 
     const [total, items] = await Promise.all([

@@ -1,0 +1,25 @@
+all:
+  children:
+    primary:
+      hosts:
+        primary-server.studyassistant.com:
+          ansible_host: 192.168.1.10
+      vars:
+        REGION: us-east
+        DB_HOST: primary-db.studyassistant.com
+        REDIS_HOST: primary-redis.studyassistant.com
+        QDRANT_HOST: primary-qdrant.studyassistant.com
+    secondary:
+      hosts:
+        secondary-server.studyassistant.com:
+          ansible_host: 192.168.1.20
+      vars:
+        REGION: eu-west
+        DB_HOST: secondary-db.studyassistant.com
+        REDIS_HOST: secondary-redis.studyassistant.com
+        QDRANT_HOST: secondary-qdrant.studyassistant.com
+  vars:
+    ansible_user: deploy
+    domain_name: studyassistant.com
+    email_for_certs: admin@studyassistant.com
+    git_repo_url: https://github.com/pradeepjoshi71/AI-Study-assistant.git

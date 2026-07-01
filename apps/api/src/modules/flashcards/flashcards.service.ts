@@ -248,9 +248,7 @@ export class FlashcardService {
     try {
       const delayMs = Math.max(0, nextReviewDate.getTime() - Date.now());
       // Re-use current masteryQueue connection details to schedule review task
-      const { Queue } = require("bullmq");
-      const client = this.masteryQueue.client;
-      const reviewQueue = new Queue("badge-check", { connection: this.masteryQueue.opts.connection });
+      const reviewQueue = new Queue("badge-check", { connection: (this.masteryQueue as any).opts.connection });
       await reviewQueue.add("flashcard-review-due", { userId, flashcardId }, { delay: delayMs });
       this.logger.log(`Scheduled card review job for card ${flashcardId} (delay: ${Math.round(delayMs / 1000)}s)`);
       await reviewQueue.close();

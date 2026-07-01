@@ -9,7 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from './stripe.service';
 import { PlansService } from './plans.service';
 import Stripe from 'stripe';
-import { BillingCycle, PlanType, SubscriptionStatus } from '@prisma/client';
+import { BillingCycle, PlanType, SubscriptionStatus, ActorType } from '@prisma/client';
 import { CreateOrganizationDto } from './dtos/create-organization.dto';
 import { UpgradeSubscriptionDto } from './dtos/upgrade-subscription.dto';
 
@@ -98,12 +98,14 @@ export class BillingService {
 
     await this.prisma.auditLog.create({
       data: {
-        organizationId: result.id,
+        orgId: result.id,
+        userId: ownerId,
         actorId: ownerId,
-        actorType: 'user',
+        actorType: ActorType.USER,
         action: 'organization.created',
         resourceType: 'organization',
         resourceId: result.id,
+        metadata: {},
       },
     });
 
@@ -182,9 +184,10 @@ export class BillingService {
 
     await this.prisma.auditLog.create({
       data: {
-        organizationId,
+        orgId: organizationId,
+        userId: actorId,
         actorId,
-        actorType: 'user',
+        actorType: ActorType.USER,
         action: 'subscription.upgraded',
         resourceType: 'subscription',
         resourceId: organizationId,
@@ -210,12 +213,14 @@ export class BillingService {
 
     await this.prisma.auditLog.create({
       data: {
-        organizationId,
+        orgId: organizationId,
+        userId: actorId,
         actorId,
-        actorType: 'user',
+        actorType: ActorType.USER,
         action: 'subscription.canceled',
         resourceType: 'subscription',
         resourceId: organizationId,
+        metadata: {},
       },
     });
 

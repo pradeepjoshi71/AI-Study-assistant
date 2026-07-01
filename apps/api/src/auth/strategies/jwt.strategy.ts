@@ -38,6 +38,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ...user,
       tier: payload.tier || mappedTier,
       orgId: payload.orgId,
+      systemRole: (payload as any).systemRole || user.systemRole || 'USER',
     };
   }
 }

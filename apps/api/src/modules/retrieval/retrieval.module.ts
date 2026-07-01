@@ -7,6 +7,6 @@ import { PrismaModule } from '../../prisma/prisma.module';
 @Module({
   imports: [PrismaModule],
   providers: [QdrantClient, RetrievalService, MultiDocRetrievalService],
-  exports: [RetrievalService, MultiDocRetrievalService],
+  exports: [RetrievalService, MultiDocRetrievalService, QdrantClient],
 })
 export class RetrievalModule {}

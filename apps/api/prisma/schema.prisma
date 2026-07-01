@@ -15,6 +15,12 @@ enum UserRole {
   ADMIN
 }
 
+enum SystemRole {
+  USER
+  ORG_ADMIN
+  SUPER_ADMIN
+}
+
 enum SubscriptionPlan {
   FREE
   PRO
@@ -40,11 +46,13 @@ model User {
   name                    String?
   avatar                  String?
   role                    UserRole           @default(STUDENT)
+  systemRole              SystemRole         @default(USER)
   subscriptionPlan        SubscriptionPlan   @default(FREE)
   isActive                Boolean            @default(true)
   timezone                String             @default("UTC")
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
+  deletedAt               DateTime?          // soft-delete timestamp; non-null = deleted
   sessions                Session[]
   documents               Document[]
   conversations           Conversation[]
@@ -67,6 +75,23 @@ model User {
   performanceRecords   PerformanceRecord[]
   userMasteries        UserMastery[]
   adaptiveSessions     AdaptiveSession[]
+  examAttempts         ExamAttempt[]
+
+  studyGroupsCreated      StudyGroup[]    @relation("CreatedGroups")
+  groupMemberships        GroupMember[]
+  groupMessages           GroupMessage[]
+  groupDocumentsAdded     GroupDocument[] @relation("GroupDocumentsAdded")
+  groupActivities         GroupActivity[]
+
+  auditLogs               AuditLog[]
+  consentRecords          ConsentRecord[]
+  dataExportRequests      DataExportRequest[]
+  dataDeletionRequests    DataDeletionRequest[]
+
+  referralCode            ReferralCode?
+  referralsSent           Referral[]             @relation("Referrer")
+  referralReceived        Referral?              @relation("Referee")
+  affiliateAccount        AffiliateAccount?
 
   @@map("users")
 }
@@ -116,6 +141,7 @@ model Document {
   user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization          Organization?   @relation(fields: [orgId], references: [id], onDelete: Cascade)
   chunks                DocumentChunk[]
+  groupDocuments        GroupDocument[]
 
   @@map("documents")
 }
@@ -621,9 +647,19 @@ model Organization {
   aiSchedules       AiSchedule[]
   userProgress      UserProgress[]
   flashcardDecks    FlashcardDeck[]
+  exams             Exam[]
+  studyGroups       StudyGroup[]
+
+  dataExportRequests   DataExportRequest[]
+  dataDeletionRequests DataDeletionRequest[]
+  retentionPolicy      RetentionPolicy?
+  auditArchives        AuditArchive[]
+  webhookEndpoints     WebhookEndpoint[]
+  developerApps        DeveloperApp[]
 
   @@map("organizations")
 }
+
 
 model Subscription {
   id             String             @id @default(uuid())
@@ -837,9 +873,11 @@ model Invitation {
 model ApiKey {
   id             String       @id @default(uuid())
   organizationId String
-  name           String // human-readable label
-  keyPrefix      String // first 8 chars: "sk_live_" (shown in UI)
+  userId         String? // creator user id
+  name           String       // human-readable label
+  keyPrefix      String       // first 8 chars: "sk_live_" (shown in UI)
   keyHash        String       @unique // SHA-256 of full key
+  scopes         String[]     // e.g. ["chat", "quiz", "analytics"]
   status         ApiKeyStatus @default(ACTIVE)
 
   // Permissions (which API products this key can access)
@@ -861,8 +899,10 @@ model ApiKey {
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   usageLogs    ApiUsageLog[]
+  usages       APIKeyUsage[]
 
   @@index([organizationId, status])
+  @@index([keyHash])
   @@map("api_keys")
 }
 
@@ -887,14 +927,13 @@ model ApiUsageLog {
 
 /// Global feature catalog
 model FeatureFlag {
-  id           String  @id @default(uuid())
-  key          String  @unique // e.g. "knowledge_graph", "tutor_agent"
-  description  String?
-  defaultValue Boolean @default(false) // global default
-  enabledPlans Json // PlanType[]: which plans get this by default
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(uuid())
+  key            String   @unique
+  enabled        Boolean  @default(false)
+  rolloutPercent Int      @default(0) // 0-100
+  targetOrgIds   String[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   overrides TenantFeatureOverride[]
 
@@ -919,22 +958,23 @@ model TenantFeatureOverride {
 
 /// Immutable audit log for compliance
 model AuditLog {
-  id             String   @id @default(uuid())
-  organizationId String?
-  actorId        String? // userId or "system"
-  actorType      String // "user" | "admin" | "system" | "api_key"
-  action         String // "subscription.upgraded", "user.invited", etc.
-  resourceType   String? // "subscription", "user", "api_key", etc.
-  resourceId     String?
-  correlationId  String? // Tracing ID for request lifecycle
-  metadata       Json? // before/after state diff
-  ipAddress      String?
-  userAgent      String?
-  createdAt      DateTime @default(now())
+  id           String    @id @default(uuid())
+  orgId        String?
+  userId       String?
+  actorId      String
+  actorType    ActorType
+  action       String
+  resourceType String
+  resourceId   String?
+  metadata     Json
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
 
-  organization Organization? @relation(fields: [organizationId], references: [id])
+  organization Organization? @relation(fields: [orgId], references: [id])
+  user         User?         @relation(fields: [userId], references: [id])
 
-  @@index([organizationId, createdAt])
+  @@index([orgId, createdAt])
   @@index([actorId, createdAt])
   @@map("audit_logs")
 }
@@ -1426,3 +1466,540 @@ model DifficultyConfig {
 }
 
 
+// ─────────────────────────────────────────────
+// Exam Engine
+// ─────────────────────────────────────────────
+
+enum ExamType {
+  PRACTICE
+  MOCK
+  TIMED
+}
+
+enum ExamStatus {
+  DRAFT
+  READY
+  ARCHIVED
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+}
+
+enum QuestionType {
+  MCQ
+  TRUE_FALSE
+  SHORT
+  FILL
+}
+
+model Exam {
+  id              String      @id @default(uuid())
+  orgId           String
+  createdBy       String
+  title           String
+  docIds          String[]
+  topicIds        String[]
+  totalQuestions  Int
+  durationMinutes Int
+  difficulty      Float
+  type            ExamType
+  status          ExamStatus  @default(DRAFT)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  organization    Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  attempts        ExamAttempt[]
+  questions       ExamQuestion[]
+
+  @@map("exams")
+}
+
+model ExamAttempt {
+  id          String        @id @default(uuid())
+  examId      String
+  userId      String
+  startedAt   DateTime      @default(now())
+  submittedAt DateTime?
+  score       Float         @default(0)
+  percentile  Float         @default(0)
+  status      AttemptStatus @default(IN_PROGRESS)
+
+  exam    Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers AttemptAnswer[]
+  result  ExamResult?
+
+  @@index([examId])
+  @@index([userId])
+  @@map("exam_attempts")
+}
+
+model ExamQuestion {
+  id            String       @id @default(uuid())
+  examId        String
+  questionText  String
+  type          QuestionType
+  options       Json
+  correctAnswer String
+  explanation   String?
+  topicId       String?
+  difficulty    Float        @default(0.5)
+  points        Int          @default(1)
+
+  exam    Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  answers AttemptAnswer[]
+
+  @@index([examId])
+  @@map("exam_questions")
+}
+
+model AttemptAnswer {
+  attemptId     String
+  questionId    String
+  userAnswer    String
+  isCorrect     Boolean @default(false)
+  timeTakenMs   Int
+  pointsAwarded Float   @default(0)
+
+  attempt  ExamAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question ExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([attemptId, questionId])
+  @@map("attempt_answers")
+}
+
+model ExamResult {
+  attemptId      String  @id
+  totalScore     Float
+  maxScore       Float
+  topicBreakdown Json
+  weakTopics     String[]
+  timingAnalysis Json
+
+  attempt ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@map("exam_results")
+}
+
+// ─── STUDY GROUP DOMAIN ───────────────────────
+
+enum GroupVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum GroupStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum GroupRole {
+  LEADER
+  MEMBER
+}
+
+enum GroupSessionStatus {
+  SCHEDULED
+  ACTIVE
+  ENDED
+}
+
+enum GroupSessionType {
+  STUDY
+  QUIZ
+  EXAM_PREP
+}
+
+enum GroupMessageType {
+  TEXT
+  AI
+  SYSTEM
+}
+
+model StudyGroup {
+  id          String          @id @default(uuid())
+  orgId       String
+  name        String
+  createdBy   String
+  maxMembers  Int             @default(10)
+  visibility  GroupVisibility @default(PUBLIC)
+  status      GroupStatus     @default(ACTIVE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator      User           @relation("CreatedGroups", fields: [createdBy], references: [id], onDelete: Cascade)
+  members      GroupMember[]
+  sessions     GroupSession[]
+  messages     GroupMessage[]
+  documents    GroupDocument[]
+  activities   GroupActivity[]
+
+  @@map("study_groups")
+}
+
+model GroupMember {
+  groupId      String
+  userId       String
+  role         GroupRole  @default(MEMBER)
+  joinedAt     DateTime   @default(now())
+  lastActiveAt DateTime   @default(now())
+
+  group        StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@map("group_members")
+}
+
+model GroupSession {
+  id          String             @id @default(uuid())
+  groupId     String
+  title       String
+  status      GroupSessionStatus @default(SCHEDULED)
+  startedAt   DateTime?
+  endedAt     DateTime?
+  sessionType GroupSessionType   @default(STUDY)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  group       StudyGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  messages    GroupMessage[]
+
+  @@map("group_sessions")
+}
+
+model GroupMessage {
+  id          String           @id @default(uuid())
+  groupId     String
+  sessionId   String?
+  userId      String
+  content     String           @db.Text
+  citations   Json?            @default("[]")
+  messageType GroupMessageType @default(TEXT)
+  createdAt   DateTime         @default(now())
+
+  group       StudyGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  session     GroupSession?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("group_messages")
+}
+
+model GroupDocument {
+  groupId   String
+  docId     String
+  addedBy   String
+  addedAt   DateTime @default(now())
+
+  group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  document  Document   @relation(fields: [docId], references: [id], onDelete: Cascade)
+  user      User       @relation("GroupDocumentsAdded", fields: [addedBy], references: [id], onDelete: Cascade)
+
+  @@id([groupId, docId])
+  @@map("group_documents")
+}
+
+model GroupActivity {
+  id        String     @id @default(uuid())
+  groupId   String
+  userId    String
+  action    String
+  metadata  Json?      @default("{}")
+  createdAt DateTime   @default(now())
+
+  group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("group_activities")
+}
+
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([targetType, targetId])
+  @@map("admin_audit_logs")
+}
+
+model SystemConfig {
+  key         String   @id @unique
+  value       String
+  description String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_configs")
+}
+
+// ─── PRIVACY / CONSENT / RETENTION ENUMS ──────
+
+enum ActorType {
+  USER
+  SYSTEM
+  ADMIN
+}
+
+enum ConsentType {
+  TERMS
+  PRIVACY
+  MARKETING
+}
+
+enum DataExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum DataDeletionStatus {
+  PENDING
+  GRACE
+  PROCESSING
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+// ─── PRIVACY / CONSENT / RETENTION MODELS ─────
+
+model ConsentRecord {
+  id          String      @id @default(uuid())
+  userId      String
+  consentType ConsentType
+  version     String
+  accepted    Boolean
+  ip          String?
+  createdAt   DateTime    @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("consent_records")
+}
+
+model DataExportRequest {
+  id          String           @id @default(uuid())
+  userId      String
+  orgId       String
+  status      DataExportStatus @default(PENDING)
+  requestedAt DateTime         @default(now())
+  completedAt DateTime?
+  expiresAt   DateTime?
+  downloadUrl String?
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([orgId])
+  @@map("data_export_requests")
+}
+
+model DataDeletionRequest {
+  id          String             @id @default(uuid())
+  userId      String
+  orgId       String
+  status      DataDeletionStatus @default(PENDING)
+  requestedAt DateTime           @default(now())
+  scheduledAt DateTime
+  completedAt DateTime?
+  reason      String?
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([orgId])
+  @@map("data_deletion_requests")
+}
+
+model RetentionPolicy {
+  orgId              String   @id @unique
+  auditRetentionDays Int      @default(90)
+  dataRetentionDays  Int      @default(365)
+  updatedBy          String
+  updatedAt          DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("retention_policies")
+}
+
+model AuditArchive {
+  id         String   @id @default(uuid())
+  orgId      String
+  storageKey String
+  sha256     String
+  createdAt  DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("audit_archives")
+}
+
+model APIKeyUsage {
+  id         String   @id @default(uuid())
+  keyId      String
+  endpoint   String
+  method     String
+  statusCode Int
+  latencyMs  Int
+  tokensUsed Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  // No FK cascade delete — retained for analytics even after key revocation
+  apiKey     ApiKey   @relation(fields: [keyId], references: [id])
+
+  @@index([keyId, createdAt])
+  @@map("api_key_usages")
+}
+
+model WebhookEndpoint {
+  id           String        @id @default(uuid())
+  orgId        String
+  url          String
+  secret       String
+  events       String[]
+  status       WebhookStatus @default(ACTIVE)
+  failureCount Int           @default(0)
+  createdAt    DateTime      @default(now())
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  deliveries   WebhookDelivery[]
+
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id            String               @id @default(uuid())
+  endpointId    String
+  event         String
+  payload       Json
+  statusCode    Int?
+  attempts      Int                  @default(0)
+  lastAttemptAt DateTime?
+  status        WebhookDeliveryStatus @default(PENDING)
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId, status])
+  @@map("webhook_deliveries")
+}
+
+model DeveloperApp {
+  id          String   @id @default(uuid())
+  orgId       String
+  name        String
+  description String?
+  website     String?
+  createdAt   DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("developer_apps")
+}
+
+// ─── DEVELOPER PLATFORM ENUMS ─────────────────────────────────────────────────
+
+enum WebhookStatus {
+  ACTIVE
+  FAILED
+  DISABLED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+// ─── REFERRAL AND AFFILIATE SYSTEM ────────────────────────────────────────────
+
+enum ReferralStatus {
+  CLICKED
+  SIGNED_UP
+  CONVERTED
+  REWARDED
+  FRAUD
+}
+
+enum ReferralRewardType {
+  CREDIT
+  CASH
+}
+
+enum ReferralRewardStatus {
+  PENDING
+  HELD
+  PAID
+  REJECTED
+}
+
+model ReferralCode {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("referral_codes")
+}
+
+model Referral {
+  id                String          @id @default(uuid())
+  referrerId        String
+  referrer          User            @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  refereeId         String?         @unique
+  referee           User?           @relation("Referee", fields: [refereeId], references: [id], onDelete: Cascade)
+  code              String
+  status            ReferralStatus  @default(CLICKED)
+  convertedAt       DateTime?
+  ip                String?
+  deviceFingerprint String?
+  createdAt         DateTime        @default(now())
+  rewards           ReferralReward[]
+
+  @@map("referrals")
+}
+
+model ReferralReward {
+  id         String               @id @default(uuid())
+  referralId String
+  referral   Referral             @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  type       ReferralRewardType
+  amount     Float
+  status     ReferralRewardStatus @default(PENDING)
+  paidAt     DateTime?
+  holdUntil  DateTime
+  createdAt  DateTime             @default(now())
+
+  @@map("referral_rewards")
+}
+
+model AffiliateAccount {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeConnectId String?
+  balance         Float    @default(0.0)
+  totalEarned     Float    @default(0.0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("affiliate_accounts")
+}

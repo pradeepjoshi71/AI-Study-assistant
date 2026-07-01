@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { BillingService } from './billing.service';
@@ -18,10 +19,13 @@ import { WebhookHandler } from './webhook.handler';
 import { StripeService } from './stripe.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Audit } from '../audit/decorators/audit.decorator';
+import { AuditInterceptor } from '../audit/interceptors/audit.interceptor';
 import { UpgradeSubscriptionDto } from './dtos/upgrade-subscription.dto';
 import { BillingCycle, PlanType } from '@prisma/client';
 
 @Controller('billing')
+@UseInterceptors(AuditInterceptor)
 export class BillingController {
   constructor(
     private readonly billing: BillingService,
@@ -46,6 +50,7 @@ export class BillingController {
   }
 
   @Post('subscribe')
+  @Audit('billing.plan-change', 'billing')
   @UseGuards(JwtAuthGuard)
   async upgrade(
     @CurrentUser() user: any,
@@ -55,6 +60,7 @@ export class BillingController {
   }
 
   @Delete('subscription')
+  @Audit('billing.plan-change', 'billing')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async cancel(@CurrentUser() user: any) {
@@ -62,6 +68,7 @@ export class BillingController {
   }
 
   @Post('checkout')
+  @Audit('billing.payment', 'billing')
   @UseGuards(JwtAuthGuard)
   async createCheckout(
     @CurrentUser() user: any,
@@ -77,6 +84,7 @@ export class BillingController {
   }
 
   @Post('portal')
+  @Audit('billing.payment', 'billing')
   @UseGuards(JwtAuthGuard)
   async createPortal(@CurrentUser() user: any, @Body('returnUrl') returnUrl: string) {
     return this.billing.createUserBillingPortalSession(user.id, returnUrl);
@@ -97,6 +105,7 @@ export class BillingController {
   // ─── Stripe Webhook (raw body required!) ─────────────────
 
   @Post('webhook')
+  @Audit('billing.webhook', 'billing')
   @HttpCode(HttpStatus.OK)
   async handleStripeWebhook(
     @Req() req: any,

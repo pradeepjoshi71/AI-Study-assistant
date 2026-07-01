@@ -69,8 +69,11 @@ class MultiModalRAGRetriever:
 
     def _init_services(self):
         try:
-            self._qdrant = get_qdrant_client()
-            ensure_v2_collection(self._qdrant)
+            from app.services.qdrant_service import qdrant_service
+            # Run collection setup on write client
+            ensure_v2_collection(qdrant_service.get_write_client())
+            # Use read client for search/query operations
+            self._qdrant = qdrant_service.get_read_client()
         except Exception as exc:
             logger.error(f"MultiModalRAGRetriever: Qdrant init failed: {exc}")
             self._qdrant = None

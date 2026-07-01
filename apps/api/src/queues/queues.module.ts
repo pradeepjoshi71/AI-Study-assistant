@@ -10,6 +10,9 @@ import { StorageModule } from '../storage/storage.module';
 import { ChatModule } from '../chat/chat.module';
 import { FlashcardModule } from '../modules/flashcards/flashcards.module';
 import { QuizModule } from '../modules/quiz/quiz.module';
+import { RetrievalModule } from '../retrieval/retrieval.module';
+import { PromptEngineModule } from '../prompt-engine/prompt-engine.module';
+import { CitationsModule } from '../citations/citations.module';
 import { GraphBuildingProcessor } from './graph-building.processor';
 import { AnalyticsAggregationProcessor } from './analytics-aggregation.processor';
 import { MemorySummarizationProcessor } from './memory-summarization.processor';
@@ -20,6 +23,11 @@ import { VoiceCleanupProcessor } from './voice-cleanup.processor';
 import { VoiceProcessingProcessor } from './voice-processing.processor';
 import { AdaptiveMasteryProcessor } from './adaptive-mastery.processor';
 import { AdaptiveContentProcessor } from './adaptive-content.processor';
+import { ExamGenerationProcessor } from '../exam/exam-generation.processor';
+import { WeaknessDetectionProcessor } from '../exam/weakness-detection.processor';
+import { ExamMasteryUpdateProcessor } from '../exam/exam-mastery-update.processor';
+import { GroupDocumentSyncProcessor } from './group-document-sync.processor';
+import { GroupSessionSummaryProcessor } from './group-session-summary.processor';
 
 const QUEUE_NAMES = [
   'document-processing',
@@ -34,7 +42,19 @@ const QUEUE_NAMES = [
   'voice-cleanup',
   'voice-processing',
   'adaptive-mastery',
+  'exam-generation',
+  'weakness-detection',
+  'group-document-sync',
+  'group-session-summary',
+  'admin-user-export',
+  'stripe-sync',
+  'compliance',
+  'email',
+  'api-key-usage',
+  'webhook-delivery',
+  'referral-reward',
 ];
+
 
 @Module({
   imports: [
@@ -48,15 +68,24 @@ const QUEUE_NAMES = [
     ChatModule,
     FlashcardModule,
     QuizModule,
+    RetrievalModule,
+    PromptEngineModule,
+    CitationsModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         connection: {
-          host: configService.get<string>('REDIS_HOST', 'localhost'),
-          port: Number(configService.get<number>('REDIS_PORT', 6379)),
+          sentinels: [
+            {
+              host: configService.get<string>('REDIS_SENTINEL_HOST', 'localhost'),
+              port: Number(configService.get<number>('REDIS_SENTINEL_PORT', 26379)),
+            },
+          ],
+          name: 'mymaster',
           password: configService.get<string>('REDIS_PASSWORD', '') || undefined,
           skipVersionCheck: true,
         },
+
         defaultJobOptions: {
           attempts: 3,
           backoff: { type: 'exponential', delay: 3000 },
@@ -79,6 +108,11 @@ const QUEUE_NAMES = [
     VoiceProcessingProcessor,
     AdaptiveMasteryProcessor,
     AdaptiveContentProcessor,
+    ExamGenerationProcessor,
+    WeaknessDetectionProcessor,
+    ExamMasteryUpdateProcessor,
+    GroupDocumentSyncProcessor,
+    GroupSessionSummaryProcessor,
   ],
   exports: [BullModule],
 })

@@ -1,6 +1,9 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, VersioningType } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import * as fs from "fs";
+import * as path from "path";
 import { AppModule } from "./app.module";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 import { MobileInterceptor } from "./common/interceptors/mobile.interceptor";
@@ -49,7 +52,9 @@ async function bootstrap() {
 
   app.use(express.urlencoded({ extended: true }));
 
-  app.setGlobalPrefix(prefix);
+  app.setGlobalPrefix(prefix, {
+    exclude: ["api/public/(.*)", "r/(.*)"],
+  });
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: "1",
@@ -71,9 +76,47 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new HttpExceptionFilter());
 
+  // Swagger setup
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle("Study Assistant Public API")
+    .setDescription("Production-grade developer APIs for AI Study Assistant Platform")
+    .setVersion("1.0.0")
+    .addBearerAuth(
+      {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "API Key",
+        name: "Authorization",
+        description: "Enter your API Key prefixed with Bearer (e.g. Bearer ska_live_...)",
+        in: "header",
+      },
+      "bearer",
+    )
+    .build();
+
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup("api/docs", app, document);
+
+  try {
+    fs.writeFileSync(
+      path.join(process.cwd(), "openapi.json"),
+      JSON.stringify(document, null, 2),
+    );
+    console.log("[Swagger] OpenAPI specification successfully written to openapi.json");
+  } catch (err: any) {
+    console.warn(`[Swagger] Failed to write openapi.json: ${err.message}`);
+  }
+
+  if (process.env.GENERATE_OPENAPI === 'true') {
+    console.log("[Swagger] GENERATE_OPENAPI is true. Closing app and exiting...");
+    await app.close();
+    process.exit(0);
+  }
+
   await app.listen(port);
   console.log(
     `[NestJS Backend API] Server started on: http://localhost:${port}/${prefix}`,
   );
 }
 bootstrap();
+

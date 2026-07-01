@@ -268,3 +268,31 @@ groups:
           team: security
         annotations:
           summary: "Bulk data export detected for tenant {{ $labels.tenant_id }}"
+
+  # ── Database Replication Alerts ────────────────────────────────────────────────
+  - name: database.replication.alerts
+    interval: 10s
+    rules:
+      - alert: PostgresReplicationLagHigh
+        expr: |
+          pg_replication_lag_seconds > 1 or pg_stat_replication_replay_lag > 1
+        for: 30s
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "PostgreSQL replication lag is high — replay lag > 1s"
+          description: "Postgres read-replica lag is {{ $value }}s. High read replication delay detected."
+
+      - alert: RedisReplicationLagHigh
+        expr: |
+          redis_master_repl_offset - on (instance) redis_slave_repl_offset > 1024
+        for: 1m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis replication lag is high"
+          description: "Redis replica is lagging behind master by {{ $value }} bytes."
+
+

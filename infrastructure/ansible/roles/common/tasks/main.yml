@@ -1,0 +1,49 @@
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install baseline packages
+  apt:
+    name:
+      - ufw
+      - fail2ban
+      - curl
+      - git
+    state: present
+
+- name: Configure UFW ports (80/443/22/5432/6379)
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - '22'
+    - '80'
+    - '443'
+    - '5432'
+    - '6379'
+
+- name: Enable UFW firewall rules
+  ufw:
+    state: enabled
+
+- name: Install and configure Fail2ban local jails
+  copy:
+    dest: /etc/fail2ban/jail.local
+    content: |
+      [sshd]
+      enabled = true
+      port = ssh
+      filter = sshd
+      logpath = /var/log/auth.log
+      maxretry = 5
+      bantime = 3600
+  notify: Restart fail2ban
+
+- name: Enforce SSH key auth and disable password login
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+  notify: Restart ssh

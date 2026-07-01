@@ -21,7 +21,8 @@ export class WebhookHandler {
     private readonly prisma: PrismaService,
     private readonly stripe: StripeService,
     private readonly cache: CacheService,
-    @InjectQueue("billing-notifications") private readonly billingQueue: Queue
+    @InjectQueue("billing-notifications") private readonly billingQueue: Queue,
+    @InjectQueue("referral-reward") private readonly referralRewardQueue: Queue,
   ) {}
 
   async handle(event: Stripe.Event): Promise<void> {
@@ -315,6 +316,29 @@ export class WebhookHandler {
         currentPeriodApiCallsUsed: 0,
       }
     });
+
+    // Check if the user has an active SIGNED_UP referral (indicating first payment)
+    const referral = await this.prisma.referral.findFirst({
+      where: {
+        refereeId: userId,
+        status: "SIGNED_UP",
+      },
+    });
+
+    if (referral) {
+      await this.prisma.referral.update({
+        where: { id: referral.id },
+        data: {
+          status: "CONVERTED",
+          convertedAt: new Date(),
+        },
+      });
+
+      await this.referralRewardQueue.add("process-reward", {
+        referralId: referral.id,
+      });
+      this.logger.log(`Referral ${referral.id} converted for referee ${userId}`);
+    }
 
     await this.invalidateUserCache(userId);
     await this.dispatchBullJob(userId, "invoice.paid", invoice);

@@ -1,95 +1,198 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import * as crypto from 'crypto';
+import * as dns from 'dns';
+import { URL } from 'url';
+import { WebhookStatus, WebhookDeliveryStatus } from '@prisma/client';
 
-export interface WebhookEventPayload {
-  event: string;
-  timestamp: number;
-  organizationId: string;
-  data: Record<string, any>;
-}
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const isPrivateIp = require('is-private-ip');
 
 @Injectable()
 export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue('webhook-delivery') private readonly deliveryQueue: Queue,
+  ) {}
 
-  /**
-   * Dispatch an outbound webhook event to the organization's registered endpoint.
-   */
-  async sendWebhook(organizationId: string, event: string, data: Record<string, any>): Promise<boolean> {
-    const org = await this.prisma.organization.findUnique({
-      where: { id: organizationId },
-      select: { webhookUrl: true, webhookSecret: true },
+  // ─── Endpoint Registration & Validation ─────────────────────────────────
+
+  async createEndpoint(
+    orgId: string,
+    urlStr: string,
+    events: string[],
+  ) {
+    // 1. Validate URL is not a private IP
+    const isValid = await this.validateUrl(urlStr);
+    if (!isValid) {
+      throw new BadRequestException(
+        'Invalid Webhook URL. Hostname cannot resolve to a private or loopback IP address.',
+      );
+    }
+
+    // Generate automatic HMAC secret
+    const secret = `whsec_${crypto.randomBytes(24).toString('hex')}`;
+
+    const endpoint = await this.prisma.webhookEndpoint.create({
+      data: {
+        orgId,
+        url: urlStr,
+        secret,
+        events,
+        status: WebhookStatus.ACTIVE,
+        failureCount: 0,
+      },
     });
 
-    if (!org || !org.webhookUrl) {
-      // No webhook configured, skip silently
-      return false;
-    }
-
-    const payload: WebhookEventPayload = {
-      event,
-      timestamp: Math.floor(Date.now() / 1000),
-      organizationId,
-      data,
+    return {
+      id: endpoint.id,
+      url: endpoint.url,
+      secret: endpoint.secret, // returned once upon creation
+      events: endpoint.events,
+      status: endpoint.status,
+      createdAt: endpoint.createdAt,
     };
-
-    const payloadString = JSON.stringify(payload);
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-StudyAssistant-Timestamp': payload.timestamp.toString(),
-    };
-
-    // Calculate signature if secret is provided
-    if (org.webhookSecret) {
-      const signature = crypto
-        .createHmac('sha256', org.webhookSecret)
-        .update(`${payload.timestamp}.${payloadString}`)
-        .digest('hex');
-      headers['X-StudyAssistant-Signature'] = signature;
-    }
-
-    this.logger.log(`Dispatching outbound webhook [${event}] to ${org.webhookUrl} for organization ${organizationId}`);
-
-    // Fire-and-forget async execution with retries
-    this.executeRequestWithRetry(org.webhookUrl, headers, payloadString);
-
-    return true;
   }
 
-  private async executeRequestWithRetry(
-    url: string,
-    headers: Record<string, string>,
-    body: string,
-    attempt = 1,
-    maxAttempts = 3,
-  ): Promise<void> {
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body,
-        signal: AbortSignal.timeout(5000), // 5s timeout
-      });
+  // ─── Webhook Dispatching ────────────────────────────────────────────────
 
-      if (!response.ok) {
-        throw new Error(`HTTP Error Status ${response.status}`);
-      }
+  /**
+   * Find active WebhookEndpoints for orgId where events contains event,
+   * then queue BullMQ delivery jobs.
+   */
+  async dispatch(
+    orgId: string,
+    event: string,
+    payload: Record<string, any>,
+  ): Promise<number> {
+    const endpoints = await this.prisma.webhookEndpoint.findMany({
+      where: {
+        orgId,
+        status: WebhookStatus.ACTIVE,
+        events: {
+          has: event,
+        },
+      },
+    });
 
-      this.logger.log(`Outbound webhook delivered successfully to ${url}`);
-    } catch (err: any) {
-      this.logger.warn(`Failed outbound webhook delivery attempt ${attempt}/${maxAttempts} to ${url}: ${err.message}`);
+    if (endpoints.length === 0) {
+      return 0;
+    }
 
-      if (attempt < maxAttempts) {
-        const backoffDelay = Math.pow(2, attempt) * 2000; // 4s, 8s
-        setTimeout(() => {
-          this.executeRequestWithRetry(url, headers, body, attempt + 1, maxAttempts);
-        }, backoffDelay);
-      } else {
-        this.logger.error(`Exceeded maximum retry attempts for webhook delivery to ${url}`);
+    const payloadWithMetadata = {
+      event,
+      timestamp: Math.floor(Date.now() / 1000),
+      orgId,
+      data: payload,
+    };
+
+    for (const endpoint of endpoints) {
+      try {
+        // Create WebhookDelivery record PENDING
+        const delivery = await this.prisma.webhookDelivery.create({
+          data: {
+            endpointId: endpoint.id,
+            event,
+            payload: payloadWithMetadata as any,
+            attempts: 0,
+            status: WebhookDeliveryStatus.PENDING,
+          },
+        });
+
+        // Enqueue background BullMQ job
+        await this.deliveryQueue.add(
+          'deliver',
+          {
+            deliveryId: delivery.id,
+            endpointId: endpoint.id,
+            url: endpoint.url,
+            secret: endpoint.secret,
+            event,
+            payload: payloadWithMetadata,
+            attempts: 1, // first attempt
+          },
+          {
+            removeOnComplete: true,
+            removeOnFail: 50,
+            attempts: 1, // we handle retries customly inside the processor
+          },
+        );
+      } catch (err: any) {
+        this.logger.error(
+          `Failed to dispatch webhook job for endpoint ${endpoint.id}: ${err.message}`,
+        );
       }
     }
+
+    return endpoints.length;
+  }
+
+  // ─── Helper: Private IP URL Validation ──────────────────────────────────
+
+  private async validateUrl(urlStr: string): Promise<boolean> {
+    try {
+      const parsed = new URL(urlStr);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return false;
+      }
+      const hostname = parsed.hostname;
+
+      // Resolve DNS to IP addresses
+      const ips = await new Promise<string[]>((resolve) => {
+        dns.resolve(hostname, (err, addresses) => {
+          if (err) {
+            // Fallback to dns.lookup for localhost or system hosts file
+            dns.lookup(hostname, (lookupErr, address) => {
+              if (lookupErr) resolve([]);
+              else resolve([address]);
+            });
+          } else {
+            resolve(addresses);
+          }
+        });
+      });
+
+      if (ips.length === 0) {
+        return false;
+      }
+
+      for (const ip of ips) {
+        if (isPrivateIp(ip)) {
+          this.logger.warn(`Rejected private IP address: ${ip} for hostname: ${hostname}`);
+          return false;
+        }
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async listEndpoints(orgId: string) {
+    return this.prisma.webhookEndpoint.findMany({
+      where: { orgId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async deleteEndpoint(id: string, orgId: string) {
+    const endpoint = await this.prisma.webhookEndpoint.findFirst({
+      where: { id, orgId },
+    });
+    if (!endpoint) {
+      throw new BadRequestException('Webhook endpoint not found or access denied.');
+    }
+    // Delete WebhookDelivery records first since it has reference
+    await this.prisma.webhookDelivery.deleteMany({
+      where: { endpointId: id },
+    });
+    return this.prisma.webhookEndpoint.delete({
+      where: { id },
+    });
   }
 }

@@ -1,0 +1,8 @@
+- name: Provision Server Infrastructure
+  hosts: all
+  become: true
+  roles:
+    - common
+    - docker
+    - certbot
+    - app

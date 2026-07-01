@@ -5,34 +5,57 @@ import Redis from "ioredis";
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client!: Redis;
+  private replicaClient!: Redis;
 
   constructor(private configService: ConfigService) {}
 
   onModuleInit() {
-    const host = this.configService.get<string>("REDIS_HOST", "localhost");
-    const port = this.configService.get<number>("REDIS_PORT", 6379);
+    const sentinelHost = this.configService.get<string>("REDIS_SENTINEL_HOST", "localhost");
+    const sentinelPort = this.configService.get<number>("REDIS_SENTINEL_PORT", 26379);
     const password = this.configService.get<string>("REDIS_PASSWORD", "");
 
     this.client = new Redis({
-      host,
-      port: Number(port),
+      sentinels: [{ host: sentinelHost, port: Number(sentinelPort) }],
+      name: "mymaster",
+      role: "master",
       password: password || undefined,
       lazyConnect: true,
     });
 
-    // Quietly handle connection errors to not crash startup if Redis isn't up locally
+    this.replicaClient = new Redis({
+      sentinels: [{ host: sentinelHost, port: Number(sentinelPort) }],
+      name: "mymaster",
+      role: "slave",
+      password: password || undefined,
+      lazyConnect: true,
+    });
+
     this.client.on("error", (err) => {
-      console.warn("Redis Connection Error:", err.message);
+      console.warn("Redis Master Sentinel Connection Error:", err.message);
+    });
+
+    this.replicaClient.on("error", (err) => {
+      console.warn("Redis Replica Sentinel Connection Error:", err.message);
     });
   }
 
   async onModuleDestroy() {
-    if (this.client) {
-      await this.client.quit();
+    try {
+      await Promise.all([
+        this.client ? this.client.quit() : Promise.resolve(),
+        this.replicaClient ? this.replicaClient.quit() : Promise.resolve(),
+      ]);
+    } catch (err: any) {
+      console.warn("Error disconnecting Redis clients:", err.message);
     }
   }
 
   getClient(): Redis {
     return this.client;
   }
+
+  getReplicaClient(): Redis {
+    return this.replicaClient;
+  }
 }
+

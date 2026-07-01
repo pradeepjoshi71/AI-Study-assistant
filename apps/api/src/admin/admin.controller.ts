@@ -7,12 +7,15 @@ import {
   Query,
   UseGuards,
   Req,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { AdminGuard } from './guards/admin.guard';
+import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
+import { SuperAdmin } from './decorators/super-admin.decorator';
+import { OrgAdmin } from './decorators/org-admin.decorator';
+import { AuditInterceptor } from '../audit/interceptors/audit.interceptor';
 import { IsString, IsOptional, IsInt, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -58,17 +61,20 @@ class QueryAuditLogsDto {
 }
 
 @Controller('admin')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN)
+@UseGuards(JwtAuthGuard, AdminGuard, ThrottlerGuard)
+@Throttle({ admin: { limit: 30, ttl: 60000 } })
+@UseInterceptors(AuditInterceptor)
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get('organizations')
+  @SuperAdmin()
   getOrganizations(@Query() query: QueryOrgsDto) {
     return this.adminService.getOrganizations(query.page, query.limit);
   }
 
   @Post('organizations/:id/suspend')
+  @OrgAdmin()
   suspendOrganization(
     @Param('id') organizationId: string,
     @Body() dto: SuspendOrgDto,
@@ -79,6 +85,7 @@ export class AdminController {
   }
 
   @Post('organizations/:id/unsuspend')
+  @OrgAdmin()
   unsuspendOrganization(
     @Param('id') organizationId: string,
     @Req() req: any,
@@ -88,11 +95,13 @@ export class AdminController {
   }
 
   @Get('metrics')
+  @SuperAdmin()
   getSystemMetrics() {
     return this.adminService.getSystemMetrics();
   }
 
   @Get('audit-logs')
+  @SuperAdmin()
   getAuditLogs(@Query() query: QueryAuditLogsDto) {
     return this.adminService.getAuditLogs({
       organizationId: query.organizationId,

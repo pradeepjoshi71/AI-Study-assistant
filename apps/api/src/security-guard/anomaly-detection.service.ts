@@ -1,6 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { ActorType } from '@prisma/client';
 
 @Injectable()
 export class AnomalyDetectionService {
@@ -98,12 +99,14 @@ export class AnomalyDetectionService {
       this.prisma.session.delete({ where: { id: sessionId } }),
       this.prisma.auditLog.create({
         data: {
-          organizationId: null,
+          orgId: null,
+          userId: session.userId,
           actorId,
-          actorType: 'user',
+          actorType: ActorType.USER,
           action: 'session.revoked',
           resourceType: 'session',
           resourceId: sessionId,
+          metadata: {},
         },
       }),
     ]);

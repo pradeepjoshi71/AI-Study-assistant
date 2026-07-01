@@ -32,7 +32,7 @@ export class AdaptiveContentProcessor extends WorkerHost {
       return;
     }
 
-    const { userId, orgId, sessionId, topicId, action, difficulty, contentType } = job.data;
+    const { userId, orgId, sessionId, topicId, action, difficulty } = job.data;
     if (!userId || !sessionId || !topicId) {
       this.logger.error(`Job ${job.id} missing adaptive content parameters.`);
       return { success: false, error: "Missing parameters" };
@@ -105,7 +105,6 @@ export class AdaptiveContentProcessor extends WorkerHost {
       } else if (action === "PRACTICE") {
         // PRACTICE: Call quiz generator with difficulty param injected into prompt
         const topic = await this.prisma.topic.findUnique({ where: { id: topicId } });
-        const topicName = topic?.name || "Practice Quiz";
 
         // Map numerical difficulty to QuizDifficulty enum: <= 0.0: easy, 0.0 - 1.5: medium, > 1.5: hard
         let quizDiff = "medium";
@@ -187,7 +186,7 @@ export class AdaptiveContentProcessor extends WorkerHost {
     }
   }
 
-  private async linkGeneratedContentToSession(sessionId: string, generatedResult: any) {
+  private async linkGeneratedContentToSession(sessionId: string, _generatedResult: any) {
     try {
       // Save details about generated content in the AdaptiveSession table via custom JSON payload fields or meta mappings
       await this.prisma.adaptiveSession.update({

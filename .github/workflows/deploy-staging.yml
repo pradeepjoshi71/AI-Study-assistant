@@ -1,107 +1,191 @@
-name: "Deploy — Staging (develop branch)"
+name: Deploy Staging
 
 on:
   push:
-    branches: [develop]
-  workflow_dispatch:
+    branches: [main]
 
 concurrency:
   group: deploy-staging
-  cancel-in-progress: true # Cancel older staging deploys if new commit arrives
-
-permissions:
-  id-token: write
-  contents: read
-
-env:
-  AWS_REGION: ap-south-1
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com
-  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_NAME_STAGING }}
-  ENVIRONMENT: staging
+  cancel-in-progress: true
 
 jobs:
-  build-and-deploy-staging:
-    name: "Build, Push & Deploy to Staging"
+  build-and-push:
     runs-on: ubuntu-latest
-    environment:
-      name: staging
-      url: https://api-staging.${{ secrets.DOMAIN_NAME }}
-
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_STAGING }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set image tag
-        id: meta
-        run: |
-          TAG="sha-$(echo $GITHUB_SHA | cut -c1-8)-staging"
-          echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build & Push — API
+      - name: Login to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ─── BUILD & PUSH NEXT.JS (WEB) ─────────────────────────────────────────
+      - name: Build and Push Web Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/web:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository }}/web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      # ─── BUILD & PUSH NESTJS (API) ──────────────────────────────────────────
+      - name: Build and Push API Image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: apps/api/Dockerfile
           push: true
-          tags: ${{ env.ECR_REGISTRY }}/ai-study-assistant-staging/api:${{ steps.meta.outputs.image_tag }}
-          cache-from: type=gha,scope=api-staging
-          cache-to: type=gha,mode=max,scope=api-staging
+          tags: |
+            ghcr.io/${{ github.repository }}/api:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository }}/api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
 
-      - name: Build & Push — AI Service
+      # ─── BUILD & PUSH FASTAPI (AI SERVICE) ──────────────────────────────────
+      - name: Build and Push AI Image
         uses: docker/build-push-action@v5
         with:
           context: apps/ai-service
           file: apps/ai-service/Dockerfile
           push: true
-          tags: ${{ env.ECR_REGISTRY }}/ai-study-assistant-staging/ai-service:${{ steps.meta.outputs.image_tag }}
-          cache-from: type=gha,scope=ai-staging
-          cache-to: type=gha,mode=max,scope=ai-staging
+          tags: |
+            ghcr.io/${{ github.repository }}/ai:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository }}/ai:latest
+          cache-from: type=gha,scope=ai
+          cache-to: type=gha,mode=max,scope=ai
 
-      - name: Build & Push — Worker
-        uses: docker/build-push-action@v5
+  deploy-and-test:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: SSH Deploy and Rollback Check
+        uses: appleboy/ssh-action@master
         with:
-          context: .
-          file: apps/api/Dockerfile
-          push: true
-          tags: ${{ env.ECR_REGISTRY }}/ai-study-assistant-staging/worker:${{ steps.meta.outputs.image_tag }}
-          cache-from: type=gha,scope=worker-staging
-          cache-to: type=gha,mode=max,scope=worker-staging
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd /app
 
-      - name: Deploy all services to Staging ECS
-        run: |
-          for SERVICE in api ai-service worker; do
-            echo "Deploying ${SERVICE} to staging..."
-            aws ecs update-service \
-              --cluster ${{ env.ECS_CLUSTER }} \
-              --service "ai-study-assistant-staging-${SERVICE}" \
-              --force-new-deployment \
-              --no-cli-pager
-          done
+            # 1. Save previous SHA for rollback recovery
+            if [ -f .current_sha ]; then
+              cp .current_sha .prev_sha
+            else
+              echo "latest" > .prev_sha
+            fi
+            echo "sha-${{ github.sha }}" > .current_sha
 
-      - name: Wait for staging stability
-        run: |
-          for SERVICE in api ai-service worker; do
-            aws ecs wait services-stable \
-              --cluster ${{ env.ECS_CLUSTER }} \
-              --services "ai-study-assistant-staging-${SERVICE}"
-          done
+            # 2. Pull new images from GHCR
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose pull
 
-      - name: Staging health check
+            # 3. Execute database migration
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose run --rm api npx prisma migrate deploy
+
+            # 4. Bring up updated services
+            IMAGE_TAG="sha-${{ github.sha }}" docker compose up -d --no-deps web api ai
+
+            # 5. Define healthcheck validator
+            check_health() {
+              local url=$1
+              local name=$2
+              echo "Verifying health check for $name at $url..."
+              for i in {1..3}; do
+                if curl -f "$url" >/dev/null 2>&1; then
+                  echo "$name is healthy!"
+                  return 0
+                fi
+                echo "Attempt $i failed. Retrying in 30 seconds..."
+                sleep 30
+              done
+              return 1
+            }
+
+            # 6. Execute checks on all services (port mapping: web=3000, api=3001, ai=8000)
+            if check_health "http://localhost:3000" "Web (Next.js)" && \
+               check_health "http://localhost:3001/api/v1/health" "API (NestJS)" && \
+               check_health "http://localhost:8000/health" "AI (FastAPI)"; then
+              echo "Deploy completed successfully!"
+            else
+              echo "Healthcheck failed! Forcing shell error for runner..."
+              exit 1
+            fi
+
+      - name: Run k6 Smoke Tests
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: tests/k6-smoke.js
+        env:
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL || 'http://localhost:3001' }}
+
+      - name: Rollback Staging on Failure
+        if: failure()
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd /app
+            if [ -f .prev_sha ]; then
+              echo "Deploy checks or smoke tests failed! Reverting staging deployment to previous release..."
+              ROLLBACK_TAG=$(cat .prev_sha)
+              IMAGE_TAG="$ROLLBACK_TAG" docker compose up -d --no-deps web api ai
+              cp .prev_sha .current_sha
+            else
+              echo "No previous release found to roll back to!"
+            fi
+
+      - name: Grafana Deploy Annotation (Success)
+        if: success()
         run: |
-          chmod +x infrastructure/scripts/health-check.sh
-          ./infrastructure/scripts/health-check.sh \
-            "https://api-staging.${{ secrets.DOMAIN_NAME }}/api/v1/health" \
-            20 \
-            3
+          curl -X POST -H "Authorization: Bearer ${{ secrets.GRAFANA_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "tags": ["deploy", "staging"],
+              "text": "Staging Deployment Successful for SHA ${{ github.sha }}",
+              "time": '$(date +%s%3N)'
+            }' \
+            "${{ secrets.GRAFANA_URL }}/api/annotations" || true
+
+      - name: Grafana Rollback Annotation (Failure)
+        if: failure()
+        run: |
+          curl -X POST -H "Authorization: Bearer ${{ secrets.GRAFANA_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "tags": ["rollback", "staging"],
+              "text": "Staging Deployment Failed and Rolled Back for SHA ${{ github.sha }}",
+              "time": '$(date +%s%3N)'
+            }' \
+            "${{ secrets.GRAFANA_URL }}/api/annotations" || true
+
+
+  slack-notify:
+    needs: [build-and-push, deploy-and-test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Notify Slack Staging Status
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_TITLE: 'Staging Deployment Status'
+          SLACK_COLOR: ${{ needs.deploy-and-test.result == 'success' && 'good' || 'danger' }}
+          SLACK_MESSAGE: |
+            *Repository:* ${{ github.repository }}
+            *Commit SHA:* ${{ github.sha }}
+            *Status:* ${{ needs.deploy-and-test.result == 'success' && 'SUCCESS 🚀' || 'FAILED ⚠️' }}
+            *Details:* Web, API, and AI services deployed to staging env.

@@ -22,7 +22,8 @@ router = APIRouter()
 # Setup Qdrant Client — shared for both collections
 qdrant_client = None
 try:
-    qdrant_client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+    from app.services.qdrant_service import qdrant_service
+    qdrant_client = qdrant_service.get_write_client()
     ensure_legacy_collection(qdrant_client)
     ensure_v2_collection(qdrant_client)
 except Exception as e:

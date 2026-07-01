@@ -24,7 +24,7 @@ export class CacheService {
 
   async get<T>(key: string): Promise<T | null> {
     try {
-      const raw = await this.redis.getClient().get(key);
+      const raw = await this.redis.getReplicaClient().get(key);
       if (!raw) return null;
       return JSON.parse(raw) as T;
     } catch (err: any) {
@@ -32,6 +32,7 @@ export class CacheService {
       return null;
     }
   }
+
 
   async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
     try {
@@ -78,13 +79,14 @@ export class CacheService {
   async invalidatePattern(pattern: string): Promise<number> {
     let deleted = 0;
     try {
-      const client = this.redis.getClient();
+      const client = this.redis.getReplicaClient();
+      const master = this.redis.getClient();
       let cursor = '0';
       do {
         const [nextCursor, keys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
         cursor = nextCursor;
         if (keys.length > 0) {
-          await client.del(...keys);
+          await master.del(...keys);
           deleted += keys.length;
         }
       } while (cursor !== '0');
@@ -97,6 +99,7 @@ export class CacheService {
     }
     return deleted;
   }
+
 
   /**
    * Writes RAG response and tracks the cache key in a user-specific Redis Set.
@@ -119,17 +122,19 @@ export class CacheService {
   async invalidateRagCache(userId: string): Promise<void> {
     try {
       const trackingKey = `user:rag-keys:${userId}`;
-      const client = this.redis.getClient();
+      const client = this.redis.getReplicaClient();
+      const master = this.redis.getClient();
       const keys = await client.smembers(trackingKey);
       if (keys.length > 0) {
-        await client.del(...keys);
+        await master.del(...keys);
         this.logger.log(`Invalidated ${keys.length} RAG cache keys for user: ${userId}`);
       }
-      await client.del(trackingKey);
+      await master.del(trackingKey);
     } catch (err: any) {
       this.logger.warn(`Failed to invalidate RAG cache for user ${userId}: ${err.message}`);
     }
   }
+
 
   /**
    * Event listener that invalidates the RAG cache on document upload event.

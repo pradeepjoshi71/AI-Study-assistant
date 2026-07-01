@@ -1,57 +1,56 @@
 import { Injectable, Logger, OnModuleInit, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
-import { PlanType } from '@prisma/client';
 
 export interface FeatureFlagDefinition {
   key: string;
-  description: string;
-  defaultValue: boolean;
-  enabledPlans: PlanType[];
+  enabled: boolean;
+  rolloutPercent: number;
+  targetOrgIds: string[];
 }
 
 export const FEATURE_FLAGS: FeatureFlagDefinition[] = [
   {
     key: 'knowledge_graph',
-    description: 'Enables the AI Knowledge Graph Explorer',
-    defaultValue: false,
-    enabledPlans: [PlanType.PRO, PlanType.TEAM, PlanType.ENTERPRISE],
+    enabled: true,
+    rolloutPercent: 100,
+    targetOrgIds: [],
   },
   {
     key: 'tutor_agent',
-    description: 'Enables the AI Tutor conversational agent',
-    defaultValue: false,
-    enabledPlans: [PlanType.PRO, PlanType.TEAM, PlanType.ENTERPRISE],
+    enabled: true,
+    rolloutPercent: 100,
+    targetOrgIds: [],
   },
   {
     key: 'analytics',
-    description: 'Enables study analytics and performance metrics',
-    defaultValue: false,
-    enabledPlans: [PlanType.PRO, PlanType.TEAM, PlanType.ENTERPRISE],
+    enabled: true,
+    rolloutPercent: 100,
+    targetOrgIds: [],
   },
   {
     key: 'api_access',
-    description: 'Enables API key provisioning and access to external API',
-    defaultValue: false,
-    enabledPlans: [PlanType.PRO, PlanType.TEAM, PlanType.ENTERPRISE],
+    enabled: true,
+    rolloutPercent: 100,
+    targetOrgIds: [],
   },
   {
     key: 'shared_workspace',
-    description: 'Enables team collaboration and shared folders',
-    defaultValue: false,
-    enabledPlans: [PlanType.TEAM, PlanType.ENTERPRISE],
+    enabled: true,
+    rolloutPercent: 100,
+    targetOrgIds: [],
   },
   {
     key: 'sso',
-    description: 'Enables SAML Single Sign-On integration',
-    defaultValue: false,
-    enabledPlans: [PlanType.ENTERPRISE],
+    enabled: true,
+    rolloutPercent: 100,
+    targetOrgIds: [],
   },
   {
     key: 'audit_logs',
-    description: 'Enables enterprise-grade activity audit trails',
-    defaultValue: false,
-    enabledPlans: [PlanType.ENTERPRISE],
+    enabled: true,
+    rolloutPercent: 100,
+    targetOrgIds: [],
   },
 ];
 
@@ -78,14 +77,14 @@ export class FeatureFlagsService implements OnModuleInit {
         where: { key: flag.key },
         create: {
           key: flag.key,
-          description: flag.description,
-          defaultValue: flag.defaultValue,
-          enabledPlans: flag.enabledPlans,
+          enabled: flag.enabled,
+          rolloutPercent: flag.rolloutPercent,
+          targetOrgIds: flag.targetOrgIds,
         },
         update: {
-          description: flag.description,
-          defaultValue: flag.defaultValue,
-          enabledPlans: flag.enabledPlans,
+          enabled: flag.enabled,
+          rolloutPercent: flag.rolloutPercent,
+          targetOrgIds: flag.targetOrgIds,
         },
       });
     }
@@ -93,57 +92,91 @@ export class FeatureFlagsService implements OnModuleInit {
   }
 
   /**
-   * Evaluates if a feature is enabled for an organization.
-   * Uses Redis caching with a 5-minute TTL.
+   * Evaluates whether a feature flag is enabled for a specific user+org context.
+   *
+   * Cache strategy: stores the flag definition (not evaluation) under `flag:{key}`
+   * with a 5-minute TTL so writes via AdminFlagsService.updateFlag() can flush it.
+   *
+   * Rollout logic (applied in order):
+   *  1. If globally `enabled = true` → allow
+   *  2. If `orgId` is in `targetOrgIds` → allow
+   *  3. If hash(userId):key % 100 < rolloutPercent → allow
+   *  4. Else deny
    */
-  async isEnabled(organizationId: string, key: string): Promise<boolean> {
-    const cacheKey = `feature_flag:${organizationId}:${key}`;
+  async isEnabled(key: string, userId: string, orgId?: string): Promise<boolean> {
     const client = this.redis.getClient();
+    const flagCacheKey = `flag:${key}`;
 
-    // Check Redis cache first
-    const cached = await client.get(cacheKey);
-    if (cached !== null) {
-      return cached === 'true';
+    // ── 1. Load flag definition from Redis (or DB) ───────────────────────────
+    let flag: {
+      id: string; key: string; enabled: boolean;
+      rolloutPercent: number; targetOrgIds: string[];
+    } | null = null;
+
+    const cached = await client.get(flagCacheKey);
+    if (cached) {
+      try {
+        flag = JSON.parse(cached);
+      } catch {
+        flag = null;
+      }
     }
 
-    // Resolve feature flag
-    const flag = await this.prisma.featureFlag.findUnique({ where: { key } });
     if (!flag) {
-      this.logger.warn(`Feature flag key not found in catalog: ${key}`);
-      return false;
+      flag = await this.prisma.featureFlag.findUnique({ where: { key } }) as any;
+      if (!flag) {
+        this.logger.warn(`Feature flag key not found in catalog: ${key}`);
+        return false;
+      }
+      // Cache the flag definition for 5 minutes
+      await client.set(flagCacheKey, JSON.stringify(flag), 'EX', 300);
     }
 
-    // Check DB for custom tenant override
-    const override = await this.prisma.tenantFeatureOverride.findUnique({
-      where: {
-        organizationId_featureFlagId: {
-          organizationId,
-          featureFlagId: flag.id,
+    // ── 2. Check tenant-level override first (highest priority) ─────────────
+    if (orgId) {
+      const override = await this.prisma.tenantFeatureOverride.findUnique({
+        where: {
+          organizationId_featureFlagId: {
+            organizationId: orgId,
+            featureFlagId: flag!.id,
+          },
         },
-      },
-    });
-
-    let enabled = false;
-
-    if (override !== null) {
-      // Custom override exists
-      enabled = override.enabled;
-    } else {
-      // Check org active subscription plan type
-      const subscription = await this.prisma.subscription.findUnique({
-        where: { organizationId },
-        include: { plan: true },
       });
-
-      const planType = subscription ? (subscription.plan.type as PlanType) : PlanType.FREE;
-      const allowedPlans = flag.enabledPlans as PlanType[];
-      enabled = allowedPlans.includes(planType);
+      if (override !== null) {
+        return override.enabled;
+      }
     }
 
-    // Cache evaluation result in Redis for 5 minutes
-    await client.set(cacheKey, enabled ? 'true' : 'false', 'EX', 300);
+    // ── 3. Global enabled flag ────────────────────────────────────────────────
+    if (flag!.enabled) return true;
 
-    return enabled;
+    // ── 4. Org whitelist ──────────────────────────────────────────────────────
+    if (orgId && flag!.targetOrgIds.includes(orgId)) return true;
+
+    // ── 5. Percentage rollout keyed on userId ─────────────────────────────────
+    if (flag!.rolloutPercent > 0 && userId) {
+      const bucket = this.getRolloutHash(userId, key);
+      if (bucket < flag!.rolloutPercent) return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * @deprecated Use isEnabled(key, userId, orgId) instead.
+   * Kept for backwards-compatibility with callers that pass (organizationId, key).
+   */
+  async isEnabledForOrg(organizationId: string, key: string): Promise<boolean> {
+    return this.isEnabled(key, '', organizationId);
+  }
+
+  private getRolloutHash(userIdOrOrgId: string, flagKey: string): number {
+    let hash = 0;
+    const str = `${userIdOrOrgId}:${flagKey}`;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return Math.abs(hash % 100);
   }
 
   /**
@@ -206,7 +239,7 @@ export class FeatureFlagsService implements OnModuleInit {
     const result: Record<string, boolean> = {};
 
     for (const flag of flags) {
-      result[flag.key] = await this.isEnabled(organizationId, flag.key);
+      result[flag.key] = await this.isEnabled(flag.key, '', organizationId);
     }
 
     return result;

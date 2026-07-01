@@ -1,11 +1,11 @@
 import logging
 import random
 from typing import List, Dict, Any, Optional
-from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, MatchText
 import google.generativeai as genai
 from app.core.config import settings
+from app.services.qdrant_service import qdrant_service
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +17,13 @@ class VectorSearchService:
 
         # Initialize Qdrant Client
         try:
-            self.client = QdrantClient(host=self.qdrant_host, port=self.qdrant_port)
+            self.write_client = qdrant_service.get_write_client()
+            self.read_client = qdrant_service.get_read_client()
             self._init_collection()
         except Exception as e:
-            logger.error(f"Failed to connect to Qdrant at {self.qdrant_host}:{self.qdrant_port} - {e}")
-            self.client = None
+            logger.error(f"Failed to connect to Qdrant - {e}")
+            self.write_client = None
+            self.read_client = None
 
         # Configure Gemini Embeddings
         api_key = settings.GEMINI_API_KEY
@@ -37,43 +39,45 @@ class VectorSearchService:
         Creates the study_chunks collection in Qdrant if it does not exist,
         and sets up payload indexes for filtering and text search.
         """
-        if not self.client:
+        if not self.write_client:
             return
 
-        collections = self.client.get_collections().collections
+        collections = self.write_client.get_collections().collections
         exists = any(c.name == self.collection_name for c in collections)
 
         if not exists:
             logger.info(f"Creating Qdrant collection: '{self.collection_name}'")
             # OpenAI text-embedding-3-small returns 1536-dimensional vectors
-            self.client.create_collection(
+            self.write_client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+                replication_factor=2,
+                write_consistency_factor=1,
             )
 
             # Create payload indexes for fast metadata filtering
-            self.client.create_payload_index(
+            self.write_client.create_payload_index(
                 collection_name=self.collection_name,
                 field_name="documentId",
                 field_schema="keyword",
             )
-            self.client.create_payload_index(
+            self.write_client.create_payload_index(
                 collection_name=self.collection_name,
                 field_name="userId",
                 field_schema="keyword",
             )
-            self.client.create_payload_index(
+            self.write_client.create_payload_index(
                 collection_name=self.collection_name,
                 field_name="fileType",
                 field_schema="keyword",
             )
-            self.client.create_payload_index(
+            self.write_client.create_payload_index(
                 collection_name=self.collection_name,
                 field_name="pageNumber",
                 field_schema="integer",
             )
             # Create full-text index on content for keyword search matching
-            self.client.create_payload_index(
+            self.write_client.create_payload_index(
                 collection_name=self.collection_name,
                 field_name="content",
                 field_schema="text",
@@ -94,7 +98,7 @@ class VectorSearchService:
         """
         Pushes a list of semantic chunks with their vector embeddings into Qdrant.
         """
-        if not self.client:
+        if not self.write_client:
             logger.warning("Skipping Qdrant upsert: Qdrant Client not initialized.")
             return False
 
@@ -124,7 +128,7 @@ class VectorSearchService:
             )
 
         try:
-            self.client.upsert(
+            self.write_client.upsert(
                 collection_name=self.collection_name,
                 points=points
             )
@@ -139,7 +143,7 @@ class VectorSearchService:
         Performs hybrid retrieval: Combines Semantic (Vector) Search and Keyword (Text payload match) Search,
         applies metadata filters, and merges outputs using Reciprocal Rank Fusion (RRF).
         """
-        if not self.client:
+        if not self.read_client:
             logger.warning("Hybrid search bypassed: Qdrant client offline.")
             return []
 
@@ -175,7 +179,7 @@ class VectorSearchService:
                 limit=limit,
                 with_payload=True
             )
-            response = self.client.http.search_api.search_points(
+            response = self.read_client.http.search_api.search_points(
                 collection_name=self.collection_name,
                 search_request=search_request
             )
@@ -188,7 +192,7 @@ class VectorSearchService:
         keyword_filter = Filter(
             must=must_conditions + [FieldCondition(key="content", match=MatchText(text=query))]
         )
-        keyword_results = self.client.scroll(
+        keyword_results = self.read_client.scroll(
             collection_name=self.collection_name,
             scroll_filter=keyword_filter,
             limit=limit,

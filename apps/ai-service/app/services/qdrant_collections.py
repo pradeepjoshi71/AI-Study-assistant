@@ -11,7 +11,6 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
     Distance,
     VectorParams,
-    NamedVectors,
 )
 from app.core.config import settings
 
@@ -28,7 +27,9 @@ IMAGE_VEC_DIM = 512   # CLIP ViT-B/32 or similar image embedding
 
 def get_qdrant_client() -> QdrantClient:
     """Returns a configured QdrantClient instance."""
-    return QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+    from app.services.qdrant_service import qdrant_service
+    return qdrant_service.get_write_client()
+
 
 
 def ensure_v2_collection(client: QdrantClient) -> bool:
@@ -59,7 +60,10 @@ def ensure_v2_collection(client: QdrantClient) -> bool:
                     distance=Distance.COSINE,
                 ),
             },
+            replication_factor=2,
+            write_consistency_factor=1,
         )
+
         logger.info(f"'{V2_COLLECTION}' collection created with text_vec ({TEXT_VEC_DIM}-dim) and image_vec ({IMAGE_VEC_DIM}-dim).")
 
         # Payload indexes for metadata filtering
@@ -106,7 +110,10 @@ def ensure_legacy_collection(client: QdrantClient) -> bool:
             client.create_collection(
                 collection_name=LEGACY_COLLECTION,
                 vectors_config=VectorParams(size=TEXT_VEC_DIM, distance=Distance.COSINE),
+                replication_factor=2,
+                write_consistency_factor=1,
             )
+
         logger.info(f"Legacy collection '{LEGACY_COLLECTION}' is active.")
         return True
     except Exception as e:

@@ -12,7 +12,10 @@ import { UsageModule } from '../usage/usage.module';
   imports: [
     PrismaModule,
     UsageModule,
-    BullModule.registerQueue({ name: 'billing-notifications' }),
+    BullModule.registerQueue(
+      { name: 'billing-notifications' },
+      { name: 'referral-reward' },
+    ),
   ],
   controllers: [BillingController],
   providers: [BillingService, StripeService, PlansService, WebhookHandler],
