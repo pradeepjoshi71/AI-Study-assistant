@@ -6,6 +6,7 @@ import { StripeService } from "./stripe.service";
 import { CacheService } from "../common/services/cache.service";
 import Stripe from "stripe";
 import { SubscriptionStatus, InvoiceStatus, PlanType } from "@prisma/client";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 
 /**
  * Stripe webhook event processor.
@@ -23,6 +24,7 @@ export class WebhookHandler {
     private readonly cache: CacheService,
     @InjectQueue("billing-notifications") private readonly billingQueue: Queue,
     @InjectQueue("referral-reward") private readonly referralRewardQueue: Queue,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async handle(event: Stripe.Event): Promise<void> {
@@ -334,7 +336,7 @@ export class WebhookHandler {
         },
       });
 
-      await this.referralRewardQueue.add("process-reward", {
+      this.eventEmitter.emit("referral.converted", {
         referralId: referral.id,
       });
       this.logger.log(`Referral ${referral.id} converted for referee ${userId}`);
