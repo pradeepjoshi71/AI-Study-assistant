@@ -2916,6 +2916,134 @@
         ]
       }
     },
+    "/api/v1/v1/referrals/code": {
+      "get": {
+        "operationId": "ReferralsController_getReferralCode_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Referrals"
+        ]
+      },
+      "post": {
+        "operationId": "ReferralsController_createReferralCode_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Referrals"
+        ]
+      }
+    },
+    "/api/v1/v1/referrals/stats": {
+      "get": {
+        "operationId": "ReferralsController_getStats_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Referrals"
+        ]
+      }
+    },
+    "/api/v1/v1/referrals/payouts": {
+      "get": {
+        "operationId": "ReferralsController_getPayouts_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Referrals"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/referrals/fraud": {
+      "get": {
+        "operationId": "ReferralAdminController_getFraudReferrals_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ReferralAdmin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/referrals/{id}/approve": {
+      "post": {
+        "operationId": "ReferralAdminController_approveFraudReferral_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ReferralAdmin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/referrals/{id}/reject": {
+      "post": {
+        "operationId": "ReferralAdminController_rejectFraudReferral_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ReferralAdmin"
+        ]
+      }
+    },
+    "/api/v1/v1/admin/referrals/payout": {
+      "post": {
+        "operationId": "ReferralAdminController_triggerPayout_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ReferralAdmin"
+        ]
+      }
+    },
     "/api/v1/v1/sso/login": {
       "post": {
         "operationId": "SsoController_initiateSso_v1",
