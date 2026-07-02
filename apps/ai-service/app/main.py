@@ -161,25 +161,31 @@ async def startup_event():
         logger.info("RUN_BACKGROUND_WORKERS is set to false. Skipping background worker tasks in web server.")
 
     # Bootstrap Qdrant collections (legacy + v2 named-vector)
-    try:
-        from app.services.qdrant_collections import (
-            get_qdrant_client,
-            ensure_legacy_collection,
-            ensure_v2_collection,
-        )
-        qdrant = get_qdrant_client()
-        ensure_legacy_collection(qdrant)
-        ensure_v2_collection(qdrant)
-    except Exception as e:
-        logger.error(f"Qdrant collection bootstrap failed (non-fatal): {e}")
+    if settings.QDRANT_SKIP:
+        logger.warning("QDRANT_SKIP=true — skipping Qdrant collection bootstrap (no Qdrant available).")
+    else:
+        try:
+            from app.services.qdrant_collections import (
+                get_qdrant_client,
+                ensure_legacy_collection,
+                ensure_v2_collection,
+            )
+            qdrant = get_qdrant_client()
+            ensure_legacy_collection(qdrant)
+            ensure_v2_collection(qdrant)
+        except Exception as e:
+            logger.error(f"Qdrant collection bootstrap failed (non-fatal): {e}")
 
     # Bootstrap Minio bucket
-    try:
-        from app.services.minio_storage import get_minio_client, ensure_bucket
-        minio = get_minio_client()
-        ensure_bucket(minio)
-    except Exception as e:
-        logger.warning(f"Minio bucket bootstrap failed (non-fatal — likely not configured): {e}")
+    if settings.MINIO_SKIP:
+        logger.warning("MINIO_SKIP=true — skipping Minio bucket bootstrap (no Minio available).")
+    else:
+        try:
+            from app.services.minio_storage import get_minio_client, ensure_bucket
+            minio = get_minio_client()
+            ensure_bucket(minio)
+        except Exception as e:
+            logger.warning(f"Minio bucket bootstrap failed (non-fatal — likely not configured): {e}")
 
     # Secondary region restore check
     if getattr(settings, "SECONDARY_REGION", False) or os.getenv("SECONDARY_REGION", "false").lower() == "true":
@@ -190,8 +196,11 @@ async def startup_event():
         except Exception as e:
             logger.error(f"Secondary region Qdrant restore failed: {e}")
 
-    # Start daily Qdrant backup loop
-    asyncio.create_task(daily_qdrant_backup_loop())
+    # Start daily Qdrant backup loop (skipped when QDRANT_SKIP=true)
+    if not settings.QDRANT_SKIP:
+        asyncio.create_task(daily_qdrant_backup_loop())
+    else:
+        logger.warning("QDRANT_SKIP=true — daily Qdrant backup loop disabled.")
 
 
     # Pre-load CLIP ViT-B/32 to amortise first-request latency

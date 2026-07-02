@@ -40,20 +40,31 @@ export default function TenantThemeProvider({
   const [config, setConfig] = useState<TenantConfig | null>(null);
 
   useEffect(() => {
-    const fetchConfig = async () => {
+    const fetchConfig = async (attempt = 1) => {
       try {
         // Build base API url by stripping /api/v1 if present
         const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
         const baseApiUrl = rawApiUrl.replace(/\/api\/v1\/?$/, "");
-        
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000); // 4s timeout
+
         // Use Host header (automatically transmitted by browser fetch)
-        const res = await fetch(`${baseApiUrl}/api/public/tenant-config`);
+        const res = await fetch(`${baseApiUrl}/api/public/tenant-config`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
         if (res.ok) {
           const data = await res.json();
           setConfig(data);
         }
-      } catch (err) {
-        console.error("Failed to load tenant configuration branding:", err);
+      } catch (err: any) {
+        if (attempt === 1) {
+          // Retry once after 3 seconds (API may still be starting up)
+          setTimeout(() => fetchConfig(2), 3000);
+        }
+        // Silently swallow — the app renders normally with default theme
       }
     };
 

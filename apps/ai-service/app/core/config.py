@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     QDRANT_HOST_NODE1: str = "qdrant-node1"
     QDRANT_HOST_NODE2: str = "qdrant-node2"
     SECONDARY_REGION: bool = False
+    # Set to True to skip Qdrant connection (e.g. running without Docker)
+    QDRANT_SKIP: bool = False
+    # Set to True to skip Minio connection (e.g. running without Docker)
+    MINIO_SKIP: bool = False
 
 
     # Google Gemini API Key

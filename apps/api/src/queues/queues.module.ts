@@ -76,26 +76,46 @@ const QUEUE_NAMES = [
     CitationsModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        connection: {
-          sentinels: [
-            {
-              host: configService.get<string>('REDIS_SENTINEL_HOST', 'localhost'),
-              port: Number(configService.get<number>('REDIS_SENTINEL_PORT', 26379)),
-            },
-          ],
-          name: 'mymaster',
-          password: configService.get<string>('REDIS_PASSWORD', '') || undefined,
-          skipVersionCheck: true,
-        },
+      useFactory: async (configService: ConfigService) => {
+        const sentinelEnabled =
+          configService.get<string>('REDIS_SENTINEL_ENABLED', 'false').toLowerCase() === 'true';
+        const password = configService.get<string>('REDIS_PASSWORD', '') || undefined;
 
-        defaultJobOptions: {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 3000 },
-          removeOnComplete: 100, // keep last 100 completed jobs
-          removeOnFail: 50,
-        },
-      }),
+        let connection: Record<string, any>;
+
+        if (sentinelEnabled) {
+          // ── Sentinel mode (Docker / production) ──────────────────────────
+          connection = {
+            sentinels: [
+              {
+                host: configService.get<string>('REDIS_SENTINEL_HOST', 'localhost'),
+                port: Number(configService.get<number>('REDIS_SENTINEL_PORT', 26379)),
+              },
+            ],
+            name: 'mymaster',
+            password,
+            skipVersionCheck: true,
+          };
+        } else {
+          // ── Direct mode (local dev — no Docker) ──────────────────────────
+          connection = {
+            host: configService.get<string>('REDIS_HOST', 'localhost'),
+            port: Number(configService.get<number>('REDIS_PORT', 6379)),
+            password,
+            skipVersionCheck: true,
+          };
+        }
+
+        return {
+          connection,
+          defaultJobOptions: {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 3000 },
+            removeOnComplete: 100,
+            removeOnFail: 50,
+          },
+        };
+      },
       inject: [ConfigService],
     }),
     ...QUEUE_NAMES.map((name) => BullModule.registerQueue({ name })),
